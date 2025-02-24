@@ -122,7 +122,7 @@ def logLike_fluxRatio(p, d, grb_flux):
             delta_1 = s1/m1
             delta_2 = s2/m2
 
-            sigma_squared =  beta**2 * (delta_1**2 + delta_2**2)
+            sigma_squared = beta**2 * (delta_1**2 + delta_2**2)
             approx_vars[count] = sigma_squared
             count += 1
     
