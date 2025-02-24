@@ -6,6 +6,8 @@ from math import comb
 from scipy.stats import chi2
 from scipy.optimize import root
 
+from gridSearch.skygrid import *
+
 def s2c(theta, phi, r = 1):
 
     return np.array([ r * np.sin(theta) * np.cos(phi),
