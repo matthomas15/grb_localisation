@@ -1,17 +1,56 @@
-from skyfield.api import EarthSatellite, load, wgs84
+
 import numpy as np
 from scipy.optimize import minimize
+import os
+from pathlib import Path
+
+from skyfield.api import EarthSatellite, load, wgs84
 from skyfield.framelib import ecliptic_frame
+from skyfield.iokit import parse_tle_file
 
 
 
-
-class SatelliteConstellation:
-    def __init__(self, pointing_offset_deg):
+class HermesConstellation:
+    def __init__(self, pointing_offset_deg, oldest_TLE_time_days = 7.0, fake_hermes = False):
         self.satellites = []
         self.ts = load.timescale()
         self.time = self.ts.now() # initialise as current time
+        self.oldest_TLE_time_days = oldest_TLE_time_days
 
+        # Load the constellation from up to date TLE files
+        # TODO Add the names of HERMES spacecraft once we have them
+        names = ['SPIRIT']
+        Path("tle_data").mkdir(exist_ok=True)
+
+        print('> Loading Satellite data from celestrak.org')
+        for name in names:
+            url = 'https://celestrak.org/NORAD/elements/gp.php?NAME=' + name + '&FORMAT=TLE'
+            fname = f'tle_data/{name}'
+            if not os.path.isfile(fname) or load.days_old(fname) >= self.oldest_TLE_time_days:
+                sat = load.tle(url, reload=True, filename = fname)
+            
+            with load.open(fname) as f:
+                satellites = list(parse_tle_file(f, self.ts))
+
+            for sat in satellites:
+                self.satellites.append(sat)
+
+        if fake_hermes:
+            # Until we have TLE's for HERMES, just initialise them as spirit-like orbits with a different raan,
+            # equally spaced around their orbital plane (through the raan)
+            for hermes_idx in range(1,7):
+
+                arg_perigee = np.round((hermes_idx - 1) * 60, 4)
+                raan = 110.0000 # close to Spirit's plane, but not quite
+
+                self.add_satellite_from_tle(name = f'HERMES_{hermes_idx}',
+                                                    line1 = '1 58468U 23185G   25058.90294474  .00035172  00000+0  11098-2 0  9997',
+                                                    line2 = f'2 58468  97.3898 {raan} 0010982 {arg_perigee} 256.4447 15.32718055 69105'
+                                                    )
+        else:
+            raise Exception("We don't have TLEs for HERMES yet, so make sure to set fake_hermes = True")
+
+        print('> Loading planet data')
         self.planets = load('de421.bsp')
         self.earth = self.planets['Earth']
         self.sun = self.planets['Sun']
@@ -20,6 +59,8 @@ class SatelliteConstellation:
         self.pointing_offset = np.radians(self.pointing_offset_deg)
 
         self.pointing_strategy = PointingStrategy(self.pointing_offset)
+
+        print('\n-- Done.\n')
 
     def __getitem__(self, idx):
         return self.satellites[idx]

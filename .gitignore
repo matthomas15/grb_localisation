@@ -164,3 +164,5 @@ cython_debug/
 
 *.DS_Store
 *de421.bsp
+tle_data/
+de421.bsp

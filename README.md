@@ -2,6 +2,13 @@
 Collection of Python tools for triangulating astrophysical transients with optimised linear algebra routines and statistical samplers.
 
 
+# Required packages:
+   - numpy
+   - matplotlib
+   - scipy
+   - emcee
+   - skyfield
+
 
 Style guide:
  - snake case for function and variable names:   e.g., some_function_does_thing, variable_x
