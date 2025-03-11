@@ -1,0 +1,103 @@
+
+import numpy as np
+import matplotlib.pyplot as plt
+from modules import likelihood
+import emcee
+import corner
+import os
+
+from IPython.display import display, Math
+from emcee.moves import StretchMove
+
+labels = ["ra", "dec", "flux"]
+
+def mcmc_sampler(ra, dec, steps, nwalk, move, t_obs, f_obs, t_90, Ph_obs, sat_pointing, flux_limit):
+    """
+    We use the mcmc sampler for our localisation.
+    """
+    flux_high = likelihood.flux_higher_bound_walkers(flux_limit)
+    
+    pos = np.array([np.random.uniform(ra-5, ra + 5, nwalk),
+                np.random.uniform(dec-5 ,dec + 5, nwalk), 
+                np.random.uniform(flux_limit + 0.1, flux_high, nwalk)]).T  # For long grb (0.5 , 2)  shortgrb(2, 5)
+    nwalkers, ndim = pos.shape
+
+    # The sampler we are using
+    sampler = emcee.EnsembleSampler(
+        nwalkers, ndim, likelihood.log_probability, args=( ra, t_obs, f_obs, t_90, Ph_obs, sat_pointing, flux_limit),
+        moves=StretchMove(a = move) # Changes this if necessary (default value = 2)
+        )
+    sampler.run_mcmc(pos,steps, progress=True)
+    return sampler
+
+
+
+def plot_chains(sampler, ra, dec, flux_avg, save_path, chain_show, chain_save):
+    """
+    Plots the MCMC chains.
+    """
+    fig, axes = plt.subplots(3, figsize=(10, 7), sharex=True)
+    samples = sampler.get_chain()
+    true_values = np.array([ra, dec, flux_avg])
+    ndim = 3 
+    for i in range(ndim):
+        ax = axes[i]
+        ax.plot(samples[:, :, i], "k", alpha=0.3)
+        ax.axhline(true_values[i], color="blue", linestyle="--", label=f"True {labels[i]}")
+        ax.set_xlim(0, len(samples))
+        ax.set_ylabel(labels[i])
+        ax.yaxis.set_label_coords(-0.1, 0.5)
+    axes[-1].set_xlabel("step number")
+    plt.tight_layout()
+    
+    if chain_save:  
+        os.makedirs(save_path, exist_ok=True)  # Ensure the directory exists
+        plt.savefig(os.path.join(save_path, "mcmc_chains.png") )
+    if chain_show:
+        plt.show()
+    
+    
+
+
+def get_flat_samples(sampler, discard):
+    """ returns the MCMC samples diiscarding initial samples where the walkers are still searching for a  minima"""
+    flat_samples = sampler.get_chain(discard= discard, flat=True)
+    # can include the extra parameter (thin = 15) that shows every point after 15 steps
+    return flat_samples
+
+def corner_plot(flat_samples, ra, dec, flux_avg, save_path, corner_show, corner_save):
+    
+    fig = corner.corner(flat_samples, labels=labels, truths= [ra, dec, flux_avg])
+    
+    if corner_save:
+        os.makedirs(save_path, exist_ok=True)  # Ensure the directory exists
+        plt.savefig(os.path.join(save_path, "corner_plot.png"))
+    if corner_show:
+        plt.show()
+        
+
+def show_result(flat_samples):
+    ndim = 3
+    for i in range(ndim):
+        mcmc = np.percentile(flat_samples[:, i], [16, 50, 84])
+        q = np.diff(mcmc)
+        txt = r"\mathrm{{{3}}} = {0:.3f}_{{-{1:.3f}}}^{{{2:.3f}}}"
+        txt = txt.format(mcmc[1], q[0], q[1], labels[i])
+        display(Math(txt))
+
+
+
+def run_mcmc(ra, dec, flux_avg, t_90, t_obs, f_obs, Ph_obs, sat_pointing, flux_limit, steps, nwalk, move, discard, save_path, corner_show= False, corner_save = False, chain_show= False, chain_save = False):
+    """
+    This function runs MCMC, plot chains, corner plots and also finds  the 68% credible interval region.
+    """
+    # initial_position = optimize_ll(ra, dec, flux_avg, t_obs, f_obs, t_90, Ph_obs, sat_pointing, flux_limit)
+    # sampler = mcmc_sampler(initial_position,steps, nwalk, move, t_obs, f_obs, t_90, Ph_obs, sat_pointing, flux_limit)
+    sampler = mcmc_sampler(ra, dec, steps, nwalk, move,  t_obs, f_obs, t_90, Ph_obs, sat_pointing, flux_limit)
+    flat_samples = get_flat_samples(sampler, discard)
+    corner_plot(flat_samples, ra, dec, flux_avg, save_path, corner_show, corner_save )
+    plot_chains(sampler, ra, dec, flux_avg, save_path, chain_show, chain_save)
+    
+    result = show_result(flat_samples)
+
+    return flat_samples
