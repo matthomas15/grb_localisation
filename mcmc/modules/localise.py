@@ -12,8 +12,6 @@ from matplotlib.patches import Patch
 
 
 
-
-
 # Finding credible interval
 def fibonacci_sphere(num_points):
     indices = np.arange(0, num_points, dtype=float) + 0.5
@@ -24,6 +22,8 @@ def fibonacci_sphere(num_points):
     
 def euclidean_distance(ra1, ra2, dec1, dec2):
     return np.sqrt((ra1-ra2)**2 + (dec1-dec2)**2)
+
+
 
 def ci_68_and_sigma(flat_samples, true_value,save_path, localisation_show, localisation_save):
     """

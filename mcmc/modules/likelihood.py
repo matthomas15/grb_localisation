@@ -62,6 +62,7 @@ def simulate_satellite_det(grb_vec, flux_avg, sat_pointing, flux_limit):
     
     The occult angle limit of 67 is calculated considering the orbit height and the relative size of earth at that height.
     """
+
     occult_angle = [angle_btw_vec(grb_vec, se_vec) for se_vec in sat2earth_vec]
     costheta = np.array([cos_angle_btw_vec(grb_vec,sp) for sp in sat_pointing])
 
@@ -136,15 +137,22 @@ def log_likelihood_flux(Ph_obs, f_pred, t90):
 
 
 
-def log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs, sat_pointing, flux_limit):
+def log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs, sat_pointing, flux_limit, offset):
     """
     We simulate the guess parameters in the similar way that we have simulated the satellite detetction for true values
     we will be using the guess direction and guess flux for the grb instead.
     """
-    ra_guess, dec_guess, f_guess = theta
-    d_guess = coord_transform.r2c(ra_guess, dec_guess)
-    f_pred, t_pred  = simulate_satellite_det(d_guess, f_guess, sat_pointing, flux_limit)
-    total =  log_likelihood_flux(Ph_obs, f_pred, t_90)  + log_likelihood_td(t_obs, t_pred, f_obs, t_90 ) 
+   
+    if offset == 0:
+        ra_guess, dec_guess = theta
+        d_guess = coord_transform.r2c(ra_guess, dec_guess)
+        t_pred  = time_delay( np.array([0, 0, 0]),sat_pos, d_guess) 
+        total = log_likelihood_td(t_obs, t_pred, f_obs, t_90)
+    else:
+        ra_guess, dec_guess, f_guess = theta
+        d_guess = coord_transform.r2c(ra_guess, dec_guess)
+        f_pred, t_pred  = simulate_satellite_det(d_guess, f_guess, sat_pointing, flux_limit)
+        total =  log_likelihood_flux(Ph_obs, f_pred, t_90)  + log_likelihood_td(t_obs, t_pred, f_obs, t_90 ) 
 
     return total
 
@@ -176,25 +184,31 @@ def sky_search(f_obs):
 
     return prior_low, prior_high
 
-def log_prior(theta, ra, flux_limit):
+def log_prior(theta, ra, flux_limit, offset):
     """
     The region in which the MCMC will search around to converge into the true value. 
     We look at half the sky.
 TODO: The prior can be modified to remove the occulted regions. THINK!!?
     """
-
-    ra_guess, dec_guess,f_guess = theta
+    if offset == 0:
+        ra_guess, dec_guess = theta
+        if ra - 45 <= ra_guess <= ra + 45  and -90 <= dec_guess<= 90 : #  for l_grb (0.463, 30) and s_grb(1.861, 30)
+            return 0.0
+        return -np.inf
+    
+    else:
+        ra_guess, dec_guess,f_guess = theta
     if ra - 45 <= ra_guess <= ra + 45  and -90 <= dec_guess<= 90 and flux_limit <= f_guess <= 30: #  for l_grb (0.463, 30) and s_grb(1.861, 30)
         return 0.0
     return -np.inf
 
 
 
-def log_probability(theta, ra, t_obs, f_obs, t_90, Ph_obs, sat_pointing, flux_limit):
-    lp = log_prior(theta, ra, flux_limit)
+def log_probability(theta, ra, t_obs, f_obs, t_90, Ph_obs, sat_pointing, flux_limit, offset):
+    lp = log_prior(theta, ra, flux_limit, offset)
     if not np.isfinite(lp): 
         return -np.inf
-    log_probability = lp + log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs, sat_pointing, flux_limit )
+    log_probability = lp + log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs, sat_pointing, flux_limit, offset )
     return log_probability 
 
 labels = ["ra", "dec", "flux"] # this is used in plot_chains, cornerplot and show_results
