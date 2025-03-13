@@ -1,15 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
-
-from modules import coord_transform
 import os
-
-from scipy.spatial import KDTree
-
-from scipy.stats import gaussian_kde
-from matplotlib.patches import Patch
-
 
 
 # Finding credible interval
@@ -25,85 +16,105 @@ def euclidean_distance(ra1, ra2, dec1, dec2):
 
 
 
-def ci_68_and_sigma(flat_samples, true_value,save_path, localisation_show, localisation_save):
+def ci_68_and_sigma(flat_samples, true_value, type, save_path, localisation_show, localisation_save):
     """
     Computes the 68% credible area and checks sigma containment for the true value.
     """
-    num_vertices = 41253
-    vertex_area = 1
+    
+    std_dev_ra = np.std(flat_samples[:,0])
 
+    if type=="short":
+        num_vertices = int(41253/(std_dev_ra/2))
+    elif type=="long":
+        if std_dev_ra > 3:
+            num_vertices = int(41253/(std_dev_ra/2))
+        else:
+            num_vertices =41253
+        
+    # Generate grid from Fibonacci sphere'
     mesh = fibonacci_sphere(num_vertices)
+    grid_ra = np.degrees(np.arctan2(mesh[:, 1], mesh[:, 0])) + 180
+    grid_dec = np.degrees(np.arcsin(mesh[:, 2]))
+
+    num_grid_points = len(grid_ra) # WHY IS THIS LEN(GRID_RA)
     ra_mcmc = flat_samples[:, 0]
     dec_mcmc = flat_samples[:, 1]
     limit = len(flat_samples)
 
-    data_cartesian = coord_transform.r2c(ra_mcmc, dec_mcmc)
-    data_cartesian /= np.linalg.norm(data_cartesian, axis=1, keepdims=True)
+    nearest_grid_indices = np.zeros(len(flat_samples), dtype=int)
+    grid_occupancy = np.zeros_like(grid_ra)
+    for i, (ra, dec) in enumerate(zip(ra_mcmc, dec_mcmc)):
+        distances = euclidean_distance(ra, grid_ra, dec, grid_dec)
+        closest_grid_point_index = np.argmin(distances)
+        nearest_grid_indices[i] = closest_grid_point_index
+        grid_occupancy[closest_grid_point_index] = grid_occupancy[closest_grid_point_index] + 1
 
-    kdtree = KDTree(mesh)
-    _, nearest_vertex_indices = kdtree.query(data_cartesian)
+    sigmas = np.zeros_like(grid_occupancy)
 
-    vertex_counts = np.bincount(nearest_vertex_indices, minlength=len(mesh))
-    sorted_counts = np.sort(vertex_counts)[::-1]
-    cumulative_points = np.cumsum(sorted_counts)
+    trials = len(flat_samples)
+    total_prob_consumed = 0
+    total = trials
+    normalised_grid_occupancy = grid_occupancy / total
 
-    # Find the 68% CI area
-    ci_index = np.searchsorted(cumulative_points, 0.68 * limit)
-    credible_interval_68 = (ci_index + 1) * vertex_area
+    for j in range(trials):
 
-    # Check where the true value falls
-    true_cartesian = coord_transform.r2c(true_value[0], true_value[1])
-    _, true_index = kdtree.query(true_cartesian)
-    true_density_rank = np.where(sorted_counts == vertex_counts[true_index])[0][0]
+        largest_value_index = np.argmax(normalised_grid_occupancy)
+        prob = normalised_grid_occupancy[largest_value_index]
+        normalised_grid_occupancy[largest_value_index] = 0
+        total_prob_consumed += prob
 
-    sigma_1_index = np.searchsorted(cumulative_points, 0.68 * limit)
-    sigma_2_index = np.searchsorted(cumulative_points, 0.95 * limit)
-    sigma_3_index = np.searchsorted(cumulative_points, 0.997 * limit)
+        if total_prob_consumed < 0.68:
+            sigmas[largest_value_index] = 1
+        elif (total_prob_consumed > 0.68) and (total_prob_consumed < 0.95):
+            sigmas[largest_value_index] = 2
+        else:
+            sigmas[largest_value_index] = 3
 
-    # Determine sigma containment
-    if true_density_rank <= sigma_1_index:
+    area_per_grid_point = 41253 / num_vertices
+    area_68 = np.sum(sigmas == 1) * area_per_grid_point
+    print(f"68% confidence region area: {area_68:.2f} deg²")
+
+    true_index = np.argmin(euclidean_distance(true_value[0], grid_ra, true_value[1], grid_dec))
+
+    # Check 
+    if sigmas[true_index] == 1:
         containment = "1-sigma"
-    elif true_density_rank <= sigma_2_index:
+        print("True value lies within 1σ (68%) confidence region.")
+    elif sigmas[true_index] == 2:
         containment = "2-sigma"
-    elif true_density_rank <= sigma_3_index:
-        containment = "3-sigma"
+        print("True value is within 2σ (95%) but not 1σ.")
     else:
-        containment = "Outside 3-sigma"
-    
-  
-
-    density_rank = np.argsort(np.argsort(-vertex_counts))
-    colors = np.full(len(mesh), "yellow")  # Default to outside 3-sigma
-    colors[density_rank <= sigma_3_index] = "blue"
-    colors[density_rank <= sigma_2_index] = "green"
-    colors[density_rank <= sigma_1_index] = "red"
-
-        
+        containment = "3-sigma"
+        print("True value is outside 3σ confidence region.")
 
     plt.figure(figsize=(8, 6))
-    plt.scatter(ra_mcmc, dec_mcmc, c=colors[nearest_vertex_indices], s=1, alpha=0.5)
-        
-    plt.scatter(true_value[0], true_value[1], color='black', marker='x', s=100, label='True Position')
-    
-    from matplotlib.patches import Patch
-    legend_elements = [
-        Patch(facecolor='red', label='1-sigma'),
-        Patch(facecolor='green', label='2-sigma'),
-        Patch(facecolor='blue', label='3-sigma'),
-        Patch(facecolor='yellow', label='Outside 3-sigma')
-    ]
+    if std_dev_ra > 3:
+        grid_point_size = 280
+    else :
+        grid_point_size = 80
+    plt.scatter(true_value[0], true_value[1], color ='red',marker ='*', s=100, edgecolor='white', linewidth=0.5, zorder=3, label ="True position" )
+    plt.scatter(grid_ra, grid_dec, c=sigmas, cmap="viridis", s = grid_point_size, alpha = 0.9)
+    if type == "long":
+        plt.xlim(true_value[0]-50, true_value[0]+50)
+        plt.ylim(true_value[1]-10, true_value[1]+10)
+    elif type == "short":
+        plt.xlim(true_value[0]-100, true_value[0]+100)
+        plt.ylim(true_value[1]-40, true_value[1]+40)
 
 
-    # Labels and legend
+    plt.colorbar(label="Confidence level")
     plt.xlabel("Right Ascension (RA)")
     plt.ylabel("Declination (Dec)")
-    plt.title("MCMC Localization Contours using KDTree")
-    plt.legend(handles=legend_elements, loc='upper right')
-    
+    plt.title("MCMC Sample Confidence levels")
+    plt.legend()
+
+
     if  localisation_save:
         os.makedirs(save_path, exist_ok=True)  # Ensure directory exists
         plt.savefig(os.path.join(save_path, "localization_plot.png"))
     if localisation_show:
         plt.show()
+    else:
+        plt.close()
 
-    return credible_interval_68, containment
+    return area_68, containment, area_per_grid_point, std_dev_ra
