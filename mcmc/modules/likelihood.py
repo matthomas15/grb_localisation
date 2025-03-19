@@ -7,9 +7,8 @@ from scipy.special import gammaln
 
 A = 50 # Area of detector's sensor
 
-sat_pos = simulation.sat_positions(num_sat = 4) # 4 satellite positions, ra=180 is fixed, and  is equally spaced in dec(-90,90)
+# sat_pos = simulation.sat_positions(num_sat = 4) # 4 satellite positions, ra=180 is fixed, and  is equally spaced in dec(-90,90)
 
-sat2earth_vec = [-sat for sat in sat_pos]
 
 
 def time_delay(r1, r2, d_grb):
@@ -54,7 +53,7 @@ def angle_btw_vec(v1, v2):
     return theta
 
 
-def simulate_satellite_det(grb_vec, flux_avg, sat_pointing, flux_limit):
+def simulate_satellite_det(grb_vec, flux_avg, sat_pos, sat_pointing, flux_limit):
     """
     This function returns the arrival times on each satellite - t_obs and the flux observed by each satllite - f_obs.
     The observed flux is set to zero if the satellite is in earth occulted region
@@ -62,7 +61,7 @@ def simulate_satellite_det(grb_vec, flux_avg, sat_pointing, flux_limit):
     
     The occult angle limit of 67 is calculated considering the orbit height and the relative size of earth at that height.
     """
-
+    sat2earth_vec = [-sat for sat in sat_pos]
     occult_angle = [angle_btw_vec(grb_vec, se_vec) for se_vec in sat2earth_vec]
     costheta = np.array([cos_angle_btw_vec(grb_vec,sp) for sp in sat_pointing])
 
@@ -137,7 +136,7 @@ def log_likelihood_flux(Ph_obs, f_pred, t90):
 
 
 
-def log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs, sat_pointing, flux_limit, offset):
+def log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs,sat_pos, sat_pointing, flux_limit, offset):
     """
     We simulate the guess parameters in the similar way that we have simulated the satellite detetction for true values
     we will be using the guess direction and guess flux for the grb instead.
@@ -151,7 +150,7 @@ def log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs, sat_pointing, flux_limit, 
     else:
         ra_guess, dec_guess, f_guess = theta
         d_guess = coord_transform.r2c(ra_guess, dec_guess)
-        f_pred, t_pred  = simulate_satellite_det(d_guess, f_guess, sat_pointing, flux_limit)
+        f_pred, t_pred  = simulate_satellite_det(d_guess, f_guess, sat_pos, sat_pointing, flux_limit)
         total =  log_likelihood_flux(Ph_obs, f_pred, t_90)  + log_likelihood_td(t_obs, t_pred, f_obs, t_90 ) 
 
     return total
@@ -204,11 +203,11 @@ TODO: The prior can be modified to remove the occulted regions. THINK!!?
 
 
 
-def log_probability(theta, ra, t_obs, f_obs, t_90, Ph_obs, sat_pointing, flux_limit, offset):
+def log_probability(theta, ra, t_obs, f_obs, t_90, Ph_obs, sat_pos, sat_pointing, flux_limit, offset):
     lp = log_prior(theta, ra, flux_limit, offset)
     if not np.isfinite(lp): 
         return -np.inf
-    log_probability = lp + log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs, sat_pointing, flux_limit, offset )
+    log_probability = lp + log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs, sat_pos, sat_pointing, flux_limit, offset )
     return log_probability 
 
 labels = ["ra", "dec", "flux"] # this is used in plot_chains, cornerplot and show_results
