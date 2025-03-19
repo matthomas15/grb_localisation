@@ -19,37 +19,38 @@ class HermesConstellation:
 
         # Load the constellation from up to date TLE files
         # TODO Add the names of HERMES spacecraft once we have them
-        names = ['SPIRIT']
+        names = ['SPIRIT', 'HERMES_0', 'HERMES_1', 'HERMES_2', 'HERMES_3', 'HERMES_4', 'HERMES_5', 'HERMES_6']
         Path("tle_data").mkdir(exist_ok=True)
+
+        if fake_hermes:
+            for hermes_idx in range(1,7):
+                fname = fname = f'tle_data/HERMES_{hermes_idx}'
+                with open(fname, 'w') as file:
+                    # Add fake satellites to the Spirit TLE to load fake HERMES data
+                    arg_perigee = str( (hermes_idx - 1) * 60 + 1e-10 )[:8]
+                    raan = '110.0000' # close to Spirit's plane, but not quite
+                    line1 = f'1 5846{hermes_idx-1}U 23185G   25058.90294474  .00035172  00000+0  11098-2 0  9997\n',
+                    line2 = f'2 5846{hermes_idx-1}  97.3898 {raan} 0010982  {arg_perigee} 256.4447 15.32718055 69105'
+                    file.writelines(f'HERMES_{hermes_idx-1}\n')
+                    file.writelines(line1)
+                    file.writelines(line2)
+        else:
+            raise Exception("We don't have TLEs for HERMES yet, so make sure to set fake_hermes = True")
 
         print('> Loading Satellite data from celestrak.org')
         for name in names:
+            
             url = 'https://celestrak.org/NORAD/elements/gp.php?NAME=' + name + '&FORMAT=TLE'
             fname = f'tle_data/{name}'
             if not os.path.isfile(fname) or load.days_old(fname) >= self.oldest_TLE_time_days:
-                sat = load.tle(url, reload=True, filename = fname)
-            
+                sat = load.tle(url, reload=True, filename = fname)  
+
             with load.open(fname) as f:
                 satellites = list(parse_tle_file(f, self.ts))
 
             for sat in satellites:
                 self.satellites.append(sat)
-
-        if fake_hermes:
-            # Until we have TLE's for HERMES, just initialise them as spirit-like orbits with a different raan,
-            # equally spaced around their orbital plane (through the raan)
-            for hermes_idx in range(1,7):
-
-                arg_perigee = np.round((hermes_idx - 1) * 60, 4)
-                raan = 110.0000 # close to Spirit's plane, but not quite
-
-                self.add_satellite_from_tle(name = f'HERMES_{hermes_idx}',
-                                                    line1 = '1 58468U 23185G   25058.90294474  .00035172  00000+0  11098-2 0  9997',
-                                                    line2 = f'2 58468  97.3898 {raan} 0010982 {arg_perigee} 256.4447 15.32718055 69105'
-                                                    )
-        else:
-            raise Exception("We don't have TLEs for HERMES yet, so make sure to set fake_hermes = True")
-
+                
         print('> Loading planet data')
         self.planets = load('de421.bsp')
         self.earth = self.planets['Earth']
