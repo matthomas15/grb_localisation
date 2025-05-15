@@ -10,7 +10,7 @@ from skyfield.iokit import parse_tle_file
 
 
 class HermesConstellation:
-    def __init__(self, pointing_offset_deg, oldest_TLE_time_days = 7.0, fake_hermes = False):
+    def __init__(self, pointing_offset_deg, oldest_TLE_time_days = 7.0, fake_hermes = False, arg_perigees=None):
         self.satellites = []
         self.ts = load.timescale()
         self.time = self.ts.now() # initialise as current time
@@ -18,25 +18,32 @@ class HermesConstellation:
 
         # Load the constellation from up to date TLE files
         # TODO Add the names of HERMES spacecraft once we have them
-        names = ['SPIRIT', 'HERMES_0', 'HERMES_1', 'HERMES_2', 'HERMES_3', 'HERMES_4', 'HERMES_5', 'HERMES_6']
+        names = ['SPIRIT', 'HERMES_1', 'HERMES_2', 'HERMES_3']
         Path("tle_data").mkdir(exist_ok=True)
 
+
         if fake_hermes:
-            for hermes_idx in range(1,7):
-                fname = fname = f'tle_data/HERMES_{hermes_idx}'
+            if arg_perigees is None:
+                arg_perigees = [str(value + 1e-10)[:8] for value in [210, 220, 230]]
+            #arg_perigees = [str(value + 1e-10)[:8] for value in [1, 60, 120, 180, 240, 300]]
+            for hermes_idx in range(1,4):
+                fname = f'tle_data/HERMES_{hermes_idx}'
                 with open(fname, 'w') as file:
-                    # Add fake satellites to the Spirit TLE to load fake HERMES data
-                    arg_perigee = str( (hermes_idx - 1) * 60 + 1e-10 )[:8]
-                    raan = '110.0000' # close to Spirit's plane, but not quite
-                    line1 = f'1 5846{hermes_idx-1}U 23185G   25058.90294474  .00035172  00000+0  11098-2 0  9997\n',
-                    line2 = f'2 5846{hermes_idx-1}  97.3898 {raan} 0010982  {arg_perigee} 256.4447 15.32718055 69105'
+            # Use predefined argument of perigee values
+                    arg_perigee = arg_perigees[hermes_idx - 1]
+                    raan = '110.0000'  # Close to Spirit's plane but slightly different
+            
+                    line1 = f'1 5846{hermes_idx-1}U 23185G   25127.87562329  .00036500  00000+0  53223-3 0  9998\n'
+                    line2 = f'2 5846{hermes_idx-1}  97.3898 {raan} 0008987  {arg_perigee} 157.6763 15.37081430 79686'
+            
                     file.writelines(f'HERMES_{hermes_idx-1}\n')
                     file.writelines(line1)
                     file.writelines(line2)
+        
         else:
             raise Exception("We don't have TLEs for HERMES yet, so make sure to set fake_hermes = True")
 
-        print('> Loading Satellite data from celestrak.org')
+        # print('> Loading Satellite data from celestrak.org')
         for name in names:
             
             url = 'https://celestrak.org/NORAD/elements/gp.php?NAME=' + name + '&FORMAT=TLE'
@@ -50,7 +57,7 @@ class HermesConstellation:
             for sat in satellites:
                 self.satellites.append(sat)
                 
-        print('> Loading planet data')
+        # print('> Loading planet data')
         self.planets = load('de421.bsp')
         self.earth = self.planets['Earth']
         self.sun = self.planets['Sun']
@@ -60,7 +67,7 @@ class HermesConstellation:
 
         self.pointing_strategy = PointingStrategy(self.pointing_offset)
 
-        print('\n-- Done.\n')
+        # print('\n-- Done.\n')
 
     def __getitem__(self, idx):
         return self.satellites[idx]
@@ -79,7 +86,7 @@ class HermesConstellation:
 
         if time is None:
             if random:
-                self.time = self.time + np.random.uniform(0, 13.99)
+                self.time = self.ts.now() + np.random.uniform(0, 13.99)
                 return
             else:        
                 raise Exception("You must enter a valid datetime object for the constellation or set random = True.")
@@ -122,6 +129,15 @@ class HermesConstellation:
             cart.append(sat.at(self.time).frame_xyz(ecliptic_frame).km)
 
         return np.array(cart)
+    
+    def get_latlon(self):
+        lat_lon_list = []
+        for sat in self.satellites:
+            geocentric = sat.at(self.time)
+            lat, lon = wgs84.latlon_of(geocentric)#
+            lat_lon_list.append((lat.degrees, lon.degrees))
+        return lat_lon_list
+   
     
     def get_pointing_radec(self):
         '''
@@ -168,9 +184,19 @@ class HermesConstellation:
         dotProd = np.dot( sat_positions, pointing_ax )
         groupMembership = np.array([ 0 if el > 0 else 1 for el in dotProd ]).astype('int')
 
-        group_offsets = [self.pointing_strategy.get_offsets( sum( groupMembership == 0 ) ),
-                         self.pointing_strategy.get_offsets( sum( groupMembership == 1 ) )
-                        ]
+        #Addition by Haritha
+        n_0 = np.sum(groupMembership == 0)
+        n_1 = np.sum(groupMembership == 1)
+
+        group_offsets = [None, None]
+        if n_0 > 0:
+            group_offsets[0] = self.pointing_strategy.spherical_offsets(group_ra[0], 0, n_0) # Changed here
+        if n_1 > 0:
+            group_offsets[1] = self.pointing_strategy.spherical_offsets(group_ra[1], 0, n_1) # Changed here        
+
+        # group_offsets = [self.pointing_strategy.get_offsets( sum( groupMembership == 0 ) ),
+        #                  self.pointing_strategy.get_offsets( sum( groupMembership == 1 ) )
+        #                 ]
 
         # Sort satellites by their height above the xy plane, and
         # keep track of where they belong in the pointing array
@@ -185,6 +211,8 @@ class HermesConstellation:
         pointings = np.zeros([num_satellites, 2]) # xyz pointing for each satellite
 
         offset_indices = [0, 0]
+
+
 
         for i in range(num_satellites):
 
@@ -208,23 +236,16 @@ class HermesConstellation:
             
             offset_indices[group_id] = offset_indices[group_id] + 1
 
+        # print(f"Group Membership: {groupMembership}")
+        # print(f"Group Offsets: {group_offsets}")
 
         return pointings, [ [group_ra[0], 0], [group_ra[1], 0] ]
     
 
 class PointingStrategy:
     def __init__(self, angular_offset):
-
         self.angular_offset = angular_offset
-        # Solve for offset magnitude for triangle strategy
-        #   find offset where an sep between top and bottom
-        #   right vertex equals self.angular_offset
-        self.triangle_offset_magnitude = 0
-        if self.angular_offset != 0:
-            i = np.arange(0, 2 * self.angular_offset, 0.0001)
-            top_ra, top_dec = np.array([0, self.angular_offset/2])
-            right_top_sep = np.abs(self.ang_sep(top_ra, top_dec, i, -i ) - self.angular_offset)
-            self.triangle_offset_magnitude = i[np.argmin(right_top_sep)]
+
 
     @staticmethod
     def add_coordinates(radec1, radec2):
@@ -242,41 +263,36 @@ class PointingStrategy:
     def ang_sep(ra1, dec1, ra2, dec2): #Return angular separation of two points on the sphere in radians
         return np.arccos( np.sin(dec1) * np.sin(dec2) + np.cos(dec1) * np.cos(dec2) * np.cos(ra1 - ra2) )
 
-    def get_offsets(self, group_membership):
-        '''
-        Pointing offsets for some central pointing based on
-        the number of satellites in a pointing group
+    def spherical_offsets(self,ra0_deg, dec0_deg, n_sats):
+        ra0 = np.radians(ra0_deg)
+        dec0 = np.radians(dec0_deg)
+        r = np.radians(self.angular_offset)
 
-        Offsets are arranged from high dec to low dec, left
-        to right.
-        '''
-        if group_membership == 1:
-            return [np.array([0,0])]
+        # Central unit vector
+        v0 = np.array([
+        np.cos(dec0) * np.cos(ra0),
+        np.cos(dec0) * np.sin(ra0),
+        np.sin(dec0)
+        ])
 
-        if group_membership == 2:
-            return np.array( [ [-self.angular_offset/2, 0], 
-                                [self.angular_offset/2, 0]
-                              ])
-        
-        if group_membership == 3:
-            return np.array([[0, self.triangle_offset_magnitude], 
-                             [-self.triangle_offset_magnitude, -self.triangle_offset_magnitude],
-                             [self.triangle_offset_magnitude, -self.triangle_offset_magnitude]
-                            ])
-        
-        if group_membership == 4:
-            return np.array( [ [0, self.angular_offset/2], 
-                                [-self.angular_offset/2, 0],
-                                [self.angular_offset/2, 0],
-                                [0, -self.angular_offset/2], 
-                              ])
-        
-        if group_membership == 5:
-            return np.array( [ [-self.angular_offset/2, self.angular_offset/2],
-                                [self.angular_offset/2, self.angular_offset/2], 
-                                [0, 0],
-                                [-self.angular_offset/2, -self.angular_offset/2], 
-                                [self.angular_offset/2, -self.angular_offset/2],
-                              ])
+        # Local tangent basis
+        temp = np.array([1, 0, 0]) if abs(v0[0]) < 0.9 else np.array([0, 1, 0])
+        u = np.cross(temp, v0)
+        u /= np.linalg.norm(u)
+        v = np.cross(v0, u)
 
-        raise Exception(f"No pointing strategy implemented for a group of {group_membership} satellites.")
+        ras, decs = [], []
+
+        for i in range(n_sats):
+            phi = 2 * np.pi * i / n_sats
+            offset_vector = (np.cos(r) * v0 +
+                         np.sin(r) * (np.cos(phi) * u + np.sin(phi) * v))
+
+            x, y, z = offset_vector
+            dec = np.arcsin(z)
+            ra = np.arctan2(y, x)
+            ras.append(np.degrees(ra) % 360)
+            decs.append(np.degrees(dec))
+
+        return list(zip(ras, decs))
+    

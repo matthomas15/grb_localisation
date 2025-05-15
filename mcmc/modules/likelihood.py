@@ -52,8 +52,29 @@ def angle_btw_vec(v1, v2):
     theta = np.degrees(np.arccos(cos_theta)) 
     return theta
 
+combined_bkgd = np.load('C:\\Users\\Haritha\\repo\\grb_localisation\\mcmc\\particle_background.npy')
+def get_particle_background_value(lat, lon):
+    """Returns the particle background value at a given (lat, lon) index."""
+    if np.isnan(lat) or np.isnan(lon):
+        raise ValueError(f"Invalid coordinates: lat={lat}, lon={lon}")
+    lat = int( np.round( lat ) )
+    lon = int( np.round( lon ) )
 
-def simulate_satellite_det(grb_vec, flux_avg, sat_pos, sat_pointing, flux_limit):
+    bkgd = combined_bkgd[ lat + 90 - 1 ][ lon + 180 - 1 ]
+
+    return bkgd
+
+def get_nonzero_background_indices(positions):
+    """Returns the list of indices where positions have nonzero particle background."""
+
+    nonzero_indices = []
+    for i, (lat, lon) in enumerate(positions):
+        bkgd_value = get_particle_background_value(lat, lon)
+        if bkgd_value > 0:
+            nonzero_indices.append(i)  # Store the index
+    return nonzero_indices
+
+def simulate_satellite_det(grb_vec, flux_avg, sat_pos, sat_pointing, flux_limit, lat_lon):
     """
     This function returns the arrival times on each satellite - t_obs and the flux observed by each satllite - f_obs.
     The observed flux is set to zero if the satellite is in earth occulted region
@@ -64,11 +85,11 @@ def simulate_satellite_det(grb_vec, flux_avg, sat_pos, sat_pointing, flux_limit)
     sat2earth_vec = [-sat for sat in sat_pos]
     occult_angle = [angle_btw_vec(grb_vec, se_vec) for se_vec in sat2earth_vec]
     costheta = np.array([cos_angle_btw_vec(grb_vec,sp) for sp in sat_pointing])
-
+    bkgd_index = get_nonzero_background_indices(lat_lon)
     f_obs = flux_avg * costheta
     t_obs = time_delay( np.array([0, 0, 0]),sat_pos, grb_vec) 
     for i in range(len(f_obs)):
-        if occult_angle[i] < 67  or  f_obs[i] < flux_limit:
+        if occult_angle[i] < 67  or  f_obs[i] < flux_limit or i in bkgd_index:
             f_obs[i] = 0
     return f_obs, t_obs
 
@@ -136,7 +157,7 @@ def log_likelihood_flux(Ph_obs, f_pred, t90):
 
 
 
-def log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs,sat_pos, sat_pointing, flux_limit, offset):
+def log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs,sat_pos, sat_pointing, flux_limit, offset, lat_lon):
     """
     We simulate the guess parameters in the similar way that we have simulated the satellite detetction for true values
     we will be using the guess direction and guess flux for the grb instead.
@@ -150,7 +171,7 @@ def log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs,sat_pos, sat_pointing, flux
     else:
         ra_guess, dec_guess, f_guess = theta
         d_guess = coord_transform.r2c(ra_guess, dec_guess)
-        f_pred, t_pred  = simulate_satellite_det(d_guess, f_guess, sat_pos, sat_pointing, flux_limit)
+        f_pred, t_pred  = simulate_satellite_det(d_guess, f_guess, sat_pos, sat_pointing, flux_limit, lat_lon)
         total =  log_likelihood_flux(Ph_obs, f_pred, t_90)  + log_likelihood_td(t_obs, t_pred, f_obs, t_90 ) 
 
     return total
@@ -203,11 +224,11 @@ TODO: The prior can be modified to remove the occulted regions. THINK!!?
 
 
 
-def log_probability(theta, ra, t_obs, f_obs, t_90, Ph_obs, sat_pos, sat_pointing, flux_limit, offset):
+def log_probability(theta, ra, t_obs, f_obs, t_90, Ph_obs, sat_pos, sat_pointing, flux_limit, offset, lat_lon):
     lp = log_prior(theta, ra, flux_limit, offset)
     if not np.isfinite(lp): 
         return -np.inf
-    log_probability = lp + log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs, sat_pos, sat_pointing, flux_limit, offset )
+    log_probability = lp + log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs, sat_pos, sat_pointing, flux_limit, offset,lat_lon )
     return log_probability 
 
 labels = ["ra", "dec", "flux"] # this is used in plot_chains, cornerplot and show_results
