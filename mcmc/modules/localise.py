@@ -25,7 +25,7 @@ def ci_68_and_sigma(flat_samples, true_value, type, offset, save_path, localisat
     if offset == 0:
         num_vertices = int(41253/(std_dev_ra/2))
     else:
-        num_vertices = int(41253/(std_dev_ra/3))
+        num_vertices = int(41253/(std_dev_ra/2))
 
     # if type=="short":
     #     num_vertices = int(41253/(std_dev_ra/3))
