@@ -26,6 +26,7 @@ def ci_68_and_sigma(flat_samples, true_value, type, offset, save_path, localisat
         num_vertices = int(41253/(std_dev_ra/2))
     else:
         num_vertices = int(41253/(std_dev_ra/2))
+        #num_vertices = int(41253*4)
 
     # if type=="short":
     #     num_vertices = int(41253/(std_dev_ra/3))
@@ -77,6 +78,7 @@ def ci_68_and_sigma(flat_samples, true_value, type, offset, save_path, localisat
 
     area_per_grid_point = 41253 / num_vertices
     area_68 = int(np.sum(sigmas == 1) * area_per_grid_point)
+    #area_68 = np.sum(sigmas == 1) * area_per_grid_point
     print(f"68% confidence region area: {area_68:.2f} deg²")
 
     true_index = np.argmin(euclidean_distance(true_value[0], grid_ra, true_value[1], grid_dec))
@@ -97,7 +99,7 @@ def ci_68_and_sigma(flat_samples, true_value, type, offset, save_path, localisat
     #     grid_point_size = 280
     # else :
     #     grid_point_size = 80
-    grid_point_size = 20*int(std_dev_ra) # for all tha other angles its 30
+    grid_point_size = 18*int(std_dev_ra) # for all tha other angles its 30
     plt.scatter(true_value[0], true_value[1], color ='red',marker ='*', s=100, edgecolor='white', linewidth=0.5, zorder=3, label ="True position" )
     plt.scatter(grid_ra, grid_dec, c=sigmas, cmap="viridis", s = grid_point_size, alpha = 0.9)
 

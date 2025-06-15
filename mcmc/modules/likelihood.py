@@ -89,7 +89,7 @@ def simulate_satellite_det(grb_vec, flux_avg, sat_pos, sat_pointing, flux_limit,
     f_obs = flux_avg * costheta
     t_obs = time_delay( np.array([0, 0, 0]),sat_pos, grb_vec) 
     for i in range(len(f_obs)):
-        if occult_angle[i] < 67  or  f_obs[i] < flux_limit or i in bkgd_index:
+        if occult_angle[i] < 67  or f_obs[i] < flux_limit or i in bkgd_index :
             f_obs[i] = 0
     return f_obs, t_obs
 
@@ -171,7 +171,7 @@ def log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs,sat_pos, sat_pointing, flux
     else:
         ra_guess, dec_guess, f_guess = theta
         d_guess = coord_transform.r2c(ra_guess, dec_guess)
-        f_pred, t_pred  = simulate_satellite_det(d_guess, f_guess, sat_pos, sat_pointing, flux_limit, lat_lon)
+        f_pred, t_pred = simulate_satellite_det(d_guess, f_guess, sat_pos, sat_pointing, flux_limit, lat_lon) 
         total =  log_likelihood_flux(Ph_obs, f_pred, t_90)  + log_likelihood_td(t_obs, t_pred, f_obs, t_90 ) 
 
     return total
@@ -191,7 +191,7 @@ def flux_higher_bound_walkers(flux_limit):
         flux_high = 5
     return flux_high
 
-
+# This cant be applied to higher number of satellites!!
 def sky_search(f_obs):
    
     # f_obs[1] == f_obs[2]  # time dealy case half sky??
@@ -218,7 +218,8 @@ TODO: The prior can be modified to remove the occulted regions. THINK!!?
     
     else:
         ra_guess, dec_guess,f_guess = theta
-    if ra - 45 <= ra_guess <= ra + 45  and -90 <= dec_guess<= 90 and flux_limit <= f_guess <= 30: #  for l_grb (0.463, 30) and s_grb(1.861, 30)
+    #if ra - 45 <= ra_guess <= ra + 45  and -90 <= dec_guess<= 90 and flux_limit <= f_guess <= 30: #  for l_grb (0.463, 30) and s_grb(1.861, 30)
+    if 0 <= ra_guess <= 360  and -90 <= dec_guess<= 90 and flux_limit <= f_guess <= 30:
         return 0.0
     return -np.inf
 
