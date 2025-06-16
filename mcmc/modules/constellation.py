@@ -53,16 +53,9 @@ def get_satellite_positions(
 
     # return rotated_positions
 
-def generate_full_constellation(t_seconds):
+def generate_full_constellation(t_seconds, planes):
     sats_per_plane = 8
     angular_spacing = 360 / sats_per_plane
-
-    planes = [
-        {"incl": 0, "rot": 0},       # Equatorial
-        {"incl": 100, "rot": 0},      # Polar
-        {"incl": 50, "rot": 0},      # Diagonal 1 (+45)
-        {"incl": 150, "rot": 0},     # Diagonal 2 (-45)
-    ]
 
     all_positions = []
     for plane in planes:
@@ -110,10 +103,10 @@ def generate_full_constellation(t_seconds):
 
 #     return list(zip(ras, decs))
 
-def spherical_offsets(ra0_deg, dec0_deg, n_sats, angular_offset_deg):
+def spherical_offsets(ra0_deg, dec0_deg, n_sats, offset_deg):
         ra0 = np.radians(ra0_deg)
         dec0 = np.radians(dec0_deg)
-        r = np.radians(angular_offset_deg)
+        r = np.radians(offset_deg)
 
         # Central unit vector
         v0 = np.array([
@@ -145,7 +138,7 @@ def spherical_offsets(ra0_deg, dec0_deg, n_sats, angular_offset_deg):
 
 
 
-def get_pointing_radec(sat_positions, num_sats, angular_offset_deg):
+def get_pointing_radec(sat_positions, num_sats, offset_deg):
     """
     Assigns RA/Dec pointing directions to satellites based on their X position.
     Satellites with positive X point around RA = 0°, negative X around RA = 180°.
@@ -175,9 +168,9 @@ def get_pointing_radec(sat_positions, num_sats, angular_offset_deg):
     # Generate spherical offsets around each group's central RA
     group_offsets = [[], []]
     if n_0 > 0:
-        group_offsets[0] = spherical_offsets(group_ra_deg[0], 0, n_0, angular_offset_deg) # n_0-1 if centre included
+        group_offsets[0] = spherical_offsets(group_ra_deg[0], 0, n_0, offset_deg) # n_0-1 if centre included
     if n_1 > 0:
-        group_offsets[1] = spherical_offsets(group_ra_deg[1], 0, n_1, angular_offset_deg) # n_1-1 if centre is included
+        group_offsets[1] = spherical_offsets(group_ra_deg[1], 0, n_1, offset_deg) # n_1-1 if centre is included
 
     # Sort satellites by height (Z), within groups, for deterministic assignment
     # height_idx_array = [[sat[2], groupMembership[idx], idx] for idx, sat in enumerate(sat_positions)]

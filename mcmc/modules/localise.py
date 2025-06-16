@@ -14,34 +14,19 @@ def fibonacci_sphere(num_points):
 def euclidean_distance(ra1, ra2, dec1, dec2):
     return np.sqrt((ra1-ra2)**2 + (dec1-dec2)**2)
 
-
-
-def ci_68_and_sigma(flat_samples, true_value, type, offset, save_path, localisation_show, localisation_save):
-    """
-    Computes the 68% credible area and checks sigma containment for the true value.
-    """
-    
-    std_dev_ra = np.std(flat_samples[:,0])
-    if offset == 0:
-        num_vertices = int(41253/(std_dev_ra/2))
-    else:
-        num_vertices = int(41253/(std_dev_ra/2))
-        #num_vertices = int(41253*4)
-
-    # if type=="short":
-    #     num_vertices = int(41253/(std_dev_ra/3))
-    # elif type=="long":
-    #     if std_dev_ra > 5:
-    #         num_vertices = int(41253/(std_dev_ra/3))
-    #     else:
-    #         num_vertices =41253
-        
-    # Generate grid from Fibonacci sphere'
+num_vertices = 41235
+def grid(num_vertices):
     mesh = fibonacci_sphere(num_vertices)
     grid_ra = np.degrees(np.arctan2(mesh[:, 1], mesh[:, 0])) + 180
     grid_dec = np.degrees(np.arcsin(mesh[:, 2]))
+    return grid_ra, grid_dec
 
-    num_grid_points = len(grid_ra) # WHY IS THIS LEN(GRID_RA)
+grid_ra, grid_dec = grid(num_vertices)
+
+def ci_68_and_sigma(flat_samples, true_value, type, save_path, localisation_show, localisation_save):
+    """
+    Computes the 68% credible area and checks sigma containment for the true value.
+    """
     ra_mcmc = flat_samples[:, 0]
     ra_mcmc = (ra_mcmc % 360)
     dec_mcmc = flat_samples[:, 1]
@@ -76,7 +61,7 @@ def ci_68_and_sigma(flat_samples, true_value, type, offset, save_path, localisat
         else:
             sigmas[largest_value_index] = 3
 
-    area_per_grid_point = 41253 / num_vertices
+    area_per_grid_point = 1
     area_68 = int(np.sum(sigmas == 1) * area_per_grid_point)
     #area_68 = np.sum(sigmas == 1) * area_per_grid_point
     print(f"68% confidence region area: {area_68:.2f} deg²")
@@ -95,11 +80,7 @@ def ci_68_and_sigma(flat_samples, true_value, type, offset, save_path, localisat
         print("True value is outside 3σ confidence region.")
 
     plt.figure(figsize=(8, 6))
-    # if std_dev_ra > 3:
-    #     grid_point_size = 280
-    # else :
-    #     grid_point_size = 80
-    grid_point_size = 18*int(std_dev_ra) # for all tha other angles its 30
+    grid_point_size = 30
     plt.scatter(true_value[0], true_value[1], color ='red',marker ='*', s=100, edgecolor='white', linewidth=0.5, zorder=3, label ="True position" )
     plt.scatter(grid_ra, grid_dec, c=sigmas, cmap="viridis", s = grid_point_size, alpha = 0.9)
 
@@ -126,4 +107,6 @@ def ci_68_and_sigma(flat_samples, true_value, type, offset, save_path, localisat
     else:
         plt.close()
 
-    return area_68, containment, area_per_grid_point, std_dev_ra
+    return area_68, containment, area_per_grid_point
+
+
