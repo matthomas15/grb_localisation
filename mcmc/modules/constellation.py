@@ -1,21 +1,5 @@
 import numpy as np
 
-# here raan_rad is the group rotation
-# def rotation_matrix(raan_rad, incl_rad):
-#     R_rot =  np.array([
-#         [np.cos(raan_rad), -np.sin(raan_rad), 0],
-#         [np.sin(raan_rad),  np.cos(raan_rad), 0],
-#         [0,                0,                1]
-#     ])
-#     R_incl = np.array([
-#         [1, 0, 0],
-#         [0, np.cos(incl_rad), -np.sin(incl_rad)],
-#         [0, np.sin(incl_rad),  np.cos(incl_rad)]
-#     ])
-#     return R_rot @ R_incl
-
-
-
 
 def get_satellite_positions(
     t_seconds, num_sats,angular_spacing_deg, inclination_deg, group_rotation_deg, altitude_km=510, period_minutes=96):
@@ -44,14 +28,6 @@ def get_satellite_positions(
     
     return np.vstack((x, y_inc, z_inc)).T
 
-    # # Stack into position vectors
-    # base_positions = np.vstack((x, y, z)).T
-
-    # # Apply 3D orbital plane rotation
-    # R = rotation_matrix(group_rotation_rad, inclination_rad)
-    # rotated_positions = base_positions @ R.T
-
-    # return rotated_positions
 
 def generate_full_constellation(t_seconds, planes):
     sats_per_plane = 8
@@ -70,38 +46,6 @@ def generate_full_constellation(t_seconds, planes):
 
     return np.vstack(all_positions)
 
-# def spherical_offsets(ra0_deg, dec0_deg, n_sats, angular_offset_deg):
-#     ra0 = np.radians(ra0_deg)
-#     dec0 = np.radians(dec0_deg)
-#     r = np.radians(angular_offset_deg)
-
-#     # Central unit vector on celestial equator
-#     v0 = np.array([
-#         np.cos(dec0) * np.cos(ra0),
-#         np.cos(dec0) * np.sin(ra0),
-#         np.sin(dec0)
-#     ])
-
-#     u = np.array([0,0,1]) # z- axis
-#     v = np.cross(u, v0)
-#     v /= np.linalg.norm(v)
-#     u = np.cross(v0, v)  # ensure right-handed frame
-
-
-#     ras, decs = [], []
-#     ras.append(ra0_deg)
-#     decs.append(dec0_deg)
-
-#     for i in range(n_sats-1):
-#         phi = 2 * np.pi * i / (n_sats-1)
-#         offset_vector = (np.cos(r) * v0 + np.sin(r) * (np.cos(phi) * u + np.sin(phi) * v))
-#         x, y, z = offset_vector
-#         dec = np.arcsin(z)
-#         ra = np.arctan2(y, x) % (2 * np.pi)
-#         ras.append(np.degrees(ra))
-#         decs.append(np.degrees(dec))
-
-#     return list(zip(ras, decs))
 
 def spherical_offsets(ra0_deg, dec0_deg, n_sats, offset_deg):
         ra0 = np.radians(ra0_deg)
@@ -235,7 +179,3 @@ def eci_to_latlon(eci_positions, t_seconds):
 
     return lat_lon_list
     
-
-
-
-    ### Copy of the

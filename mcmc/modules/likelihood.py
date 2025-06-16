@@ -5,12 +5,6 @@ from scipy.special import gammaln
 
 
 
-A = 50 # Area of detector's sensor
-
-# sat_pos = simulation.sat_positions(num_sat = 4) # 4 satellite positions, ra=180 is fixed, and  is equally spaced in dec(-90,90)
-
-
-
 def time_delay(r1, r2, d_grb):
     """
     Returns the delay in arrival time of grb signals between two satellites
@@ -117,47 +111,77 @@ def sigma_cc(t90, f_obs):
 
 
 
-def log_likelihood_td(t_obs, t_pred, f_obs, t_90 ):
-    """
-    Log -likelihood function for timedelay is a guassian. Here the measured time delay  is the sum of true time dealy 
-    and the additional noise from signal cross-correlation. Note that we have not added Instrument noise yet 
+# def log_likelihood_td(t_obs, t_pred, f_obs, t_90 ):
+#     """
+#     Log -likelihood function for timedelay is a guassian. Here the measured time delay  is the sum of true time dealy 
+#     and the additional noise from signal cross-correlation. Note that we have not added Instrument noise yet 
 
-    """
-    num_sat= len(f_obs) 
-    ll_sum = []
+#     """
+#     num_sat= len(f_obs) 
+#     ll_sum = []
      
-    for i in range(num_sat-1):
-        for j in range(i+1, num_sat):
-            if f_obs[i] > 0 and f_obs[j] > 0:
-                delta_t_obs = t_obs[i]- t_obs[j]
-                delta_t_pred = t_pred[i]- t_pred[j]
+#     for i in range(num_sat-1):
+#         for j in range(i+1, num_sat):
+#             if f_obs[i] > 0 and f_obs[j] > 0:
+#                 delta_t_obs = t_obs[i]- t_obs[j]
+#                 delta_t_pred = t_pred[i]- t_pred[j]
 
-                sigma =  sigma_cc(t_90, f_obs) # gives an array of 4 sigma values
+#                 sigma =  sigma_cc(t_90, f_obs) 
+#                 sigma_final = np.max([sigma[i], sigma[j]])
+
+#                 N_sigma_cc = np.random.normal(loc=0, scale = sigma_final)
+#                 measured_delay = delta_t_obs + N_sigma_cc
+                
+#                 gaussian_ll = -0.5*((measured_delay-delta_t_pred)**2)/(sigma_final**2)
+
+#                 ll_sum.append(gaussian_ll)
+
+#     return np.sum(ll_sum)
+def log_likelihood_td(t_obs, t_pred, f_obs, t_90):
+    """
+    Log-likelihood function using only the 5 satellite pairs with the highest |delta_t_obs| 
+    (which likely correspond to the largest baselines).
+    """
+
+    num_sat = len(f_obs)
+    pair_data = []
+
+    sigma = sigma_cc(t_90, f_obs)  # compute once outside loops
+
+    for i in range(num_sat - 1):
+        for j in range(i + 1, num_sat):
+            if f_obs[i] > 0 and f_obs[j] > 0:
+                delta_t_obs = t_obs[i] - t_obs[j]
+                delta_t_pred = t_pred[i] - t_pred[j]
                 sigma_final = np.max([sigma[i], sigma[j]])
 
-                N_sigma_cc = np.random.normal(loc=0, scale = sigma_final)
-                measured_delay = delta_t_obs + N_sigma_cc
-                
-                gaussian_ll = -0.5*((measured_delay-delta_t_pred)**2)/(sigma_final**2)
+                pair_data.append((abs(delta_t_obs), delta_t_obs, delta_t_pred, sigma_final))
 
-                ll_sum.append(gaussian_ll)
+    # Sort by |delta_t_obs| in descending order
+    top_pairs = sorted(pair_data, key=lambda x: x[0], reverse=True)[:5]
+
+    ll_sum = []
+    for _, delta_t_obs, delta_t_pred, sigma_final in top_pairs:
+        N_sigma_cc = np.random.normal(loc=0, scale=sigma_final)
+        measured_delay = delta_t_obs + N_sigma_cc
+        gaussian_ll = -0.5 * ((measured_delay - delta_t_pred) ** 2) / (sigma_final ** 2)
+        ll_sum.append(gaussian_ll)
 
     return np.sum(ll_sum)
 
 
-
-def log_likelihood_flux(Ph_obs, f_pred, t90): 
+def log_likelihood_flux(Ph_obs, f_pred, t90, Area): 
     """
     This is a poisson function. Ph_obs is pre-calculated using  observed flux(f_obs), t90 and area of the detector.
 
     """
-    Ph_guess = np.maximum(f_pred * t90 * A, 1e-10)  # Ph_guess cannot be zero, as log(Ph_guess) will be unndefined
+    Ph_guess = np.maximum(f_pred * t90 * Area, 1e-10)  # Ph_guess cannot be zero, as log(Ph_guess) will be undefined
     poisson_ll = Ph_obs * np.log(Ph_guess) - Ph_guess - gammaln(Ph_obs + 1) # log of poisson function
     return  np.sum(poisson_ll)
 
 
 
-def log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs,sat_pos, sat_pointing, flux_limit, offset, lat_lon):
+def log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset, lat_lon):
     """
     We simulate the guess parameters in the similar way that we have simulated the satellite detetction for true values
     we will be using the guess direction and guess flux for the grb instead.
@@ -172,7 +196,7 @@ def log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs,sat_pos, sat_pointing, flux
         ra_guess, dec_guess, f_guess = theta
         d_guess = coord_transform.r2c(ra_guess, dec_guess)
         f_pred, t_pred = simulate_satellite_det(d_guess, f_guess, sat_pos, sat_pointing, flux_limit, lat_lon) 
-        total =  log_likelihood_flux(Ph_obs, f_pred, t_90)  + log_likelihood_td(t_obs, t_pred, f_obs, t_90 ) 
+        total =  log_likelihood_flux(Ph_obs, f_pred, t_90, Area)  + log_likelihood_td(t_obs, t_pred, f_obs, t_90 ) 
 
     return total
 
@@ -225,11 +249,11 @@ TODO: The prior can be modified to remove the occulted regions. THINK!!?
 
 
 
-def log_probability(theta, ra, t_obs, f_obs, t_90, Ph_obs, sat_pos, sat_pointing, flux_limit, offset, lat_lon):
+def log_probability(theta, ra, t_obs, f_obs, t_90, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset, lat_lon):
     lp = log_prior(theta, ra, flux_limit, offset)
     if not np.isfinite(lp): 
         return -np.inf
-    log_probability = lp + log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs, sat_pos, sat_pointing, flux_limit, offset,lat_lon )
+    log_probability = lp + log_likelihood(theta, t_obs, f_obs, t_90, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset,lat_lon )
     return log_probability 
 
-labels = ["ra", "dec", "flux"] # this is used in plot_chains, cornerplot and show_results
+labels = ["ra", "dec", "flux"] # this is used in plot_chains, cornerplot and show_results3
