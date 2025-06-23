@@ -112,9 +112,9 @@ def get_pointing_radec(sat_positions, num_sats, offset_deg):
     # Generate spherical offsets around each group's central RA
     group_offsets = [[], []]
     if n_0 > 0:
-        group_offsets[0] = spherical_offsets(group_ra_deg[0], 0, n_0, offset_deg) # n_0-1 if centre included
+        group_offsets[0] = spherical_offsets(group_ra_deg[0], 0, n_0-1, offset_deg) # n_0-1 if centre included
     if n_1 > 0:
-        group_offsets[1] = spherical_offsets(group_ra_deg[1], 0, n_1, offset_deg) # n_1-1 if centre is included
+        group_offsets[1] = spherical_offsets(group_ra_deg[1], 0, n_1-1, offset_deg) # n_1-1 if centre is included
 
     # Sort satellites by height (Z), within groups, for deterministic assignment
     # height_idx_array = [[sat[2], groupMembership[idx], idx] for idx, sat in enumerate(sat_positions)]
@@ -124,24 +124,24 @@ def get_pointing_radec(sat_positions, num_sats, offset_deg):
     pointings = np.zeros((num_sats, 2))  # (RA, Dec) in degrees
     offset_indices = [0, 0]
 
-    # central_assigned = [False, False]
-
-    # for _, group_id, sat_idx in height_idx_array:
-    #     if not central_assigned[group_id]:
-    #         # First satellite in group: assign center
-    #         pointings[sat_idx] = (group_ra_deg[group_id], 0)
-    #         central_assigned[group_id] = True
-    #     else:
-    #         # Remaining satellites: assign offset directions
-    #         ra_dec = group_offsets[group_id][offset_indices[group_id]]
-    #         pointings[sat_idx] = ra_dec
-    #         offset_indices[group_id] += 1
+    central_assigned = [False, False]
 
     for _, group_id, sat_idx in height_idx_array:
-        group_idx = offset_indices[group_id]
-        ra_dec = group_offsets[group_id][group_idx]
-        pointings[sat_idx] = ra_dec
-        offset_indices[group_id] += 1
+        if not central_assigned[group_id]:
+            # First satellite in group: assign center
+            pointings[sat_idx] = (group_ra_deg[group_id], 0)
+            central_assigned[group_id] = True
+        else:
+            # Remaining satellites: assign offset directions
+            ra_dec = group_offsets[group_id][offset_indices[group_id]]
+            pointings[sat_idx] = ra_dec
+            offset_indices[group_id] += 1
+
+    # for _, group_id, sat_idx in height_idx_array:
+    #     group_idx = offset_indices[group_id]
+    #     ra_dec = group_offsets[group_id][group_idx]
+    #     pointings[sat_idx] = ra_dec
+    #     offset_indices[group_id] += 1
 
     return pointings, [(group_ra_deg[0], 0), (group_ra_deg[1], 0)]
 

@@ -11,25 +11,25 @@ from emcee.moves import StretchMove
 
 labels = ["ra", "dec", "flux"]
 
-def mcmc_sampler(ra, dec, steps, nwalk, move, t_obs, f_obs, t_90, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset, lat_lon):
+def mcmc_sampler(ra, dec, steps, nwalk, move, t_obs, f_obs, t_90, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset, lat_lon, rng):
     """
     We use the mcmc sampler for our localisation.
     """
     flux_high = likelihood.flux_higher_bound_walkers(flux_limit)
 
     if offset == 0:
-        pos = np.array([np.random.uniform(ra-5, ra + 5, nwalk),
-                np.random.uniform(dec-5 ,dec + 5, nwalk)]).T
+        pos = np.array([rng.uniform(ra-5, ra + 5, nwalk),
+                rng.uniform(dec-5 ,dec + 5, nwalk)]).T
         nwalkers, ndim = pos.shape
     else:
-        pos = np.array([np.random.uniform(ra-5, ra + 5, nwalk),
-                np.random.uniform(dec-5 ,dec + 5, nwalk), 
-                np.random.uniform(flux_limit + 0.1, flux_high, nwalk)]).T  # For long grb (0.5 , 2)  shortgrb(2, 5)
+        pos = np.array([rng.uniform(ra-5, ra + 5, nwalk),
+                rng.uniform(dec-5 ,dec + 5, nwalk), 
+                rng.uniform(flux_limit + 0.1, flux_high, nwalk)]).T  # For long grb (0.5 , 2)  shortgrb(2, 5)
         nwalkers, ndim = pos.shape
 
         # The sampler we are using
     sampler = emcee.EnsembleSampler(
-        nwalkers, ndim, likelihood.log_probability, args=( ra, t_obs, f_obs, t_90, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset,lat_lon),
+        nwalkers, ndim, likelihood.log_probability, args=( ra, t_obs, f_obs, t_90, rng, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset,lat_lon),
         moves=StretchMove(a = move) # Changes this if necessary (default value = 2)
         )
     sampler.run_mcmc(pos,steps, progress=True)
@@ -102,13 +102,13 @@ def show_result(flat_samples, offset):
 
 
 
-def run_mcmc(ra, dec, flux_avg, t_90, t_obs, f_obs, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset,lat_lon, steps, nwalk, move, discard, save_path, corner_show= False, corner_save = False, chain_show= False, chain_save = False):
+def run_mcmc(ra, dec, flux_avg, t_90, rng, t_obs, f_obs, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset,lat_lon, steps, nwalk, move, discard, save_path, corner_show= False, corner_save = False, chain_show= False, chain_save = False):
     """
     This function runs MCMC, plot chains, corner plots and also finds  the 68% credible interval region.
     """
     # initial_position = optimize_ll(ra, dec, flux_avg, t_obs, f_obs, t_90, Ph_obs, sat_pointing, flux_limit)
     # sampler = mcmc_sampler(initial_position,steps, nwalk, move, t_obs, f_obs, t_90, Ph_obs, sat_pointing, flux_limit)
-    sampler = mcmc_sampler(ra, dec, steps, nwalk, move,  t_obs, f_obs, t_90, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset,lat_lon)
+    sampler = mcmc_sampler(ra, dec, steps, nwalk, move,  t_obs, f_obs, t_90, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset,lat_lon, rng)
     flat_samples = get_flat_samples(sampler, discard)
     corner_plot(flat_samples, ra, dec, flux_avg, offset, save_path, corner_show, corner_save )
     plot_chains(sampler, ra, dec, flux_avg, offset,  save_path, chain_show, chain_save)
