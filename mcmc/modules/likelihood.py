@@ -112,63 +112,62 @@ def sigma_cc(t90, f_obs):
 
     return sigma
 
+def compute_pairwise_noise(f_obs, t_90, rng):
+    num_sat = len(f_obs)
+    noise_matrix = np.zeros((num_sat, num_sat))
+    sigma = sigma_cc(t_90, f_obs)
+    for i in range(num_sat - 1):
+        for j in range(i + 1, num_sat):
+            if f_obs[i] > 0 and f_obs[j] > 0:
+                sigma_final = np.max([sigma[i], sigma[j]])
+                noise_matrix[i, j] = rng.normal(0, sigma_final)
+    return noise_matrix
+
+def log_likelihood_td(t_obs, t_pred, f_obs, t_90, noise_matrix):
+    num_sat = len(f_obs)
+    ll_sum = []
+    sigma = sigma_cc(t_90, f_obs)
+
+    for i in range(num_sat - 1):
+        for j in range(i + 1, num_sat):
+            if f_obs[i] > 0 and f_obs[j] > 0:
+                delta_t_obs = t_obs[i] - t_obs[j]
+                delta_t_pred = t_pred[i] - t_pred[j]
+                sigma_final = np.max([sigma[i], sigma[j]])
+                
+                measured_delay = delta_t_obs + noise_matrix[i, j]
+                gaussian_ll = -0.5 * ((measured_delay - delta_t_pred) ** 2) / (sigma_final ** 2)
+                ll_sum.append(gaussian_ll)
+    return np.sum(ll_sum)
 
 
 
-# def log_likelihood_td(t_obs, t_pred, f_obs, t_90 ):
+# def log_likelihood_td(t_obs, t_pred, f_obs, t_90, rng ):
 #     """
 #     Log -likelihood function for timedelay is a guassian. Here the measured time delay  is the sum of true time dealy 
 #     and the additional noise from signal cross-correlation. Note that we have not added Instrument noise yet 
 
 #     """
 #     num_sat= len(f_obs) 
-    
 #     ll_sum = []
-    
+     
 #     for i in range(num_sat-1):
 #         for j in range(i+1, num_sat):
 #             if f_obs[i] > 0 and f_obs[j] > 0:
 #                 delta_t_obs = t_obs[i]- t_obs[j]
 #                 delta_t_pred = t_pred[i]- t_pred[j]
+
 #                 sigma =  sigma_cc(t_90, f_obs) 
 #                 sigma_final = np.max([sigma[i], sigma[j]])
 
-#                 # idx = i if sigma[i] >= sigma[j] else j
-#                 # cc_noise = N_sigma_cc[idx]
-
-#                 measured_delay = delta_t_obs 
+#                 N_sigma_cc = rng.normal(loc=0, scale = sigma_final)
+#                 measured_delay = delta_t_obs # + N_sigma_cc
                 
-#                 gaussian_ll = -((measured_delay-delta_t_pred)**2)/(sigma_final**2)
+#                 gaussian_ll = -0.5*((measured_delay-delta_t_pred)**2)/(sigma_final**2)
+
 #                 ll_sum.append(gaussian_ll)
 
 #     return np.sum(ll_sum)
-
-def log_likelihood_td(t_obs, t_pred, f_obs, t_90, rng ):
-    """
-    Log -likelihood function for timedelay is a guassian. Here the measured time delay  is the sum of true time dealy 
-    and the additional noise from signal cross-correlation. Note that we have not added Instrument noise yet 
-
-    """
-    num_sat= len(f_obs) 
-    ll_sum = []
-     
-    for i in range(num_sat-1):
-        for j in range(i+1, num_sat):
-            if f_obs[i] > 0 and f_obs[j] > 0:
-                delta_t_obs = t_obs[i]- t_obs[j]
-                delta_t_pred = t_pred[i]- t_pred[j]
-
-                sigma =  sigma_cc(t_90, f_obs) 
-                sigma_final = np.max([sigma[i], sigma[j]])
-
-                N_sigma_cc = rng.normal(loc=0, scale = sigma_final)
-                measured_delay = delta_t_obs + N_sigma_cc
-                
-                gaussian_ll = -0.5*((measured_delay-delta_t_pred)**2)/(sigma_final**2)
-
-                ll_sum.append(gaussian_ll)
-
-    return np.sum(ll_sum)
 
 # def log_likelihood_td(t_obs, t_pred, f_obs, t_90):
 #     """
@@ -216,7 +215,7 @@ def log_likelihood_flux(Ph_obs, f_pred, t90, Area):
 
 
 
-def log_likelihood(theta, t_obs, f_obs, t_90,rng, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset, lat_lon):
+def log_likelihood(theta, t_obs, f_obs, t_90,noise_matrix, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset, lat_lon):
     """
     We simulate the guess parameters in the similar way that we have simulated the satellite detetction for true values
     we will be using the guess direction and guess flux for the grb instead.
@@ -226,12 +225,12 @@ def log_likelihood(theta, t_obs, f_obs, t_90,rng, Ph_obs, Area, sat_pos, sat_poi
         ra_guess, dec_guess = theta
         d_guess = coord_transform.r2c(ra_guess, dec_guess)
         t_pred  = time_delay( np.array([0, 0, 0]),sat_pos, d_guess) 
-        total = log_likelihood_td(t_obs, t_pred, f_obs, t_90,rng)
+        total = log_likelihood_td(t_obs, t_pred, f_obs, t_90,noise_matrix)
     else:
         ra_guess, dec_guess, f_guess = theta
         d_guess = coord_transform.r2c(ra_guess, dec_guess)
         f_pred, t_pred = simulate_satellite_det(d_guess, f_guess, sat_pos, sat_pointing, flux_limit, lat_lon) 
-        total =  log_likelihood_flux(Ph_obs, f_pred, t_90, Area)   + log_likelihood_td(t_obs, t_pred, f_obs, t_90, rng ) 
+        total =  log_likelihood_flux(Ph_obs, f_pred, t_90, Area)   + log_likelihood_td(t_obs, t_pred, f_obs, t_90, noise_matrix ) 
     
     return total
 
@@ -284,11 +283,11 @@ TODO: The prior can be modified to remove the occulted regions. THINK!!?
 
 
 
-def log_probability(theta, ra, t_obs, f_obs, t_90,rng, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset, lat_lon):
+def log_probability(theta, ra, t_obs, f_obs, t_90,noise_matrix, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset, lat_lon):
     lp = log_prior(theta, ra, flux_limit, offset)
     if not np.isfinite(lp): 
         return -np.inf
-    log_probability = lp + log_likelihood(theta, t_obs, f_obs, t_90, rng, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset,lat_lon )
+    log_probability = lp + log_likelihood(theta, t_obs, f_obs, t_90, noise_matrix, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset,lat_lon )
     return log_probability 
 
 labels = ["ra", "dec", "flux"] # this is used in plot_chains, cornerplot and show_results3
