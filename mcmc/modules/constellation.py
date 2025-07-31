@@ -46,6 +46,23 @@ def generate_full_constellation(t_seconds, planes):
 
     return np.vstack(all_positions)
 
+def zenith_pointing(sat_positions):
+    """
+    Compute pointing directions (RA, Dec) toward zenith from each satellite position.
+    
+    Parameters:
+        sat_positions: np.ndarray of shape (N, 3), satellite positions in ECI frame.
+    
+    Returns:
+        pointings: np.ndarray of shape (N, 2), where each row is (RA, Dec) in degrees.
+    """
+    directions = sat_positions / np.linalg.norm(sat_positions, axis=1)[:, None]  # Normalize
+    x, y, z = directions[:, 0], directions[:, 1], directions[:, 2]
+
+    ra = np.degrees(np.arctan2(y, x)) % 360
+    dec = np.degrees(np.arcsin(z))
+    return np.column_stack((x,y,z))
+    #return np.column_stack((ra, dec))
 
 def spherical_offsets(ra0_deg, dec0_deg, n_sats, offset_deg):
         ra0 = np.radians(ra0_deg)

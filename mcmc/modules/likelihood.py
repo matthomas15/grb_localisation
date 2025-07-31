@@ -4,6 +4,10 @@ from modules import coord_transform
 from scipy.special import gammaln
 
 
+def occult_angle(R_earth=6371,altitude_leo=550):
+    occult_angle = np.rad2deg(np.arcsin(R_earth/(R_earth + altitude_leo)))
+    return occult_angle
+
 
 def time_delay(r1, r2, d_grb):
     """
@@ -77,13 +81,13 @@ def simulate_satellite_det(grb_vec, flux_avg, sat_pos, sat_pointing, flux_limit,
     The occult angle limit of 67 is calculated considering the orbit height and the relative size of earth at that height.
     """
     sat2earth_vec = [-sat for sat in sat_pos]
-    occult_angle = [angle_btw_vec(grb_vec, se_vec) for se_vec in sat2earth_vec]
+    occult = [angle_btw_vec(grb_vec, se_vec) for se_vec in sat2earth_vec]
     costheta = np.array([cos_angle_btw_vec(grb_vec,sp) for sp in sat_pointing])
     bkgd_index = get_nonzero_background_indices(lat_lon)
     f_obs = flux_avg * costheta
     t_obs = time_delay( np.array([0, 0, 0]),sat_pos, grb_vec) 
     for i in range(len(f_obs)):
-        if occult_angle[i] < 67  or f_obs[i] < flux_limit or i in bkgd_index :
+        if  occult[i] < occult_angle()  or f_obs[i] < flux_limit or i in bkgd_index:
             f_obs[i] = 0
     return f_obs, t_obs
 
@@ -102,11 +106,11 @@ def sigma_cc(t90, f_obs):
     nonzero_mask = f_obs > 0  # Boolean mask for nonzero values
 
     if t90 > 2:  # Long GRB case
-        sigma[nonzero_mask] = 10**(-0.88 * np.log10(f_obs[nonzero_mask]) - 3)
+        sigma[nonzero_mask] = 10**(-0.88 * np.log10(f_obs[nonzero_mask]) - 3) # MULTIPLY 1000 TO MAKE IT WORSE
         #sigma[nonzero_mask] = 10**(-0.22 * np.log10(f_obs[nonzero_mask]) + 0.41)
         
     else:  # Short GRB case
-        sigma[nonzero_mask] = 10**(-1.02 * np.log10(f_obs[nonzero_mask]) - 1.33)
+        sigma[nonzero_mask] = 10**(-1.02 * np.log10(f_obs[nonzero_mask]) - 1.33) # MULTIPLY 100 TO MAKE IT WORSE
         #sigma[nonzero_mask] = 10**(-0.14 * np.log10(f_obs[nonzero_mask]) - 1.08)
         
 
@@ -168,6 +172,9 @@ def log_likelihood_td(t_obs, t_pred, f_obs, t_90, noise_matrix):
 #                 ll_sum.append(gaussian_ll)
 
 #     return np.sum(ll_sum)
+
+
+
 
 # def log_likelihood_td(t_obs, t_pred, f_obs, t_90):
 #     """
