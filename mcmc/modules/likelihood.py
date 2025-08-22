@@ -5,9 +5,14 @@ from scipy.special import gammaln
 
 
 combined_bkgd = np.load('C:\\Users\\Haritha\\repo\\grb_localisation\\mcmc\\particle_background.npy')
+def flux_limit_long(Area):
+    Flux = 0.116*np.sqrt(Area/125) # 0.116 is flux limit of GBM detectoer of area 125 cm2 
+    return Flux
 
-flux_limit_long = 0.463/4
-flux_limit_short = 1.861/4
+def flux_limit_short(Area):
+    Flux = 0.465*np.sqrt(Area/125) # 0.465 is flux limit of GBM detectoer of area 125 cm2 
+    return Flux
+
 R_earth =6371 # km
 altitude_leo =550 # km
 
@@ -198,23 +203,17 @@ def simulate_satellite_det(grb_vec, flux_avg, sat_pos, sat_pointing, flux_limit,
     sat_pos = np.asarray(sat_pos)
     sat_pointing = np.asarray(sat_pointing)
 
-    # Vector from satellite to Earth center (negative of sat_pos)
     sat2earth_vec = -sat_pos
 
-    # Vectorized occultation angles and cosines
     occult = angle_btw_vec(grb_vec, sat2earth_vec)
     costheta = cos_angle_btw_vec(grb_vec, sat_pointing)
 
-    # Determine background blockage
     bkgd_index = get_nonzero_background_indices(lat_lon)
 
-    # Compute observed flux
     f_obs = flux_avg * costheta
 
-    # Time delay (assuming `time_delay()` is already vectorized)
     t_obs = time_delay(np.array([0, 0, 0]), sat_pos, grb_vec)
 
-    # Apply detection conditions
     mask = (occult >= occ_angle) & (f_obs >= flux_limit)
     mask[list(bkgd_index)] = False  # Set f_obs = 0 for background-blocked indices , mask is like setting 1 if true and 0 if false
 
@@ -225,7 +224,7 @@ def simulate_satellite_det(grb_vec, flux_avg, sat_pos, sat_pointing, flux_limit,
 
 
 
-def sigma_cc(t90, f_obs):
+def sigma_cc(t90, f_obs, Area):
     
     """
     Gives the sigma value of signal cross-correlation  from flux and sigma_CC relation
@@ -233,16 +232,16 @@ def sigma_cc(t90, f_obs):
         t90: Time interval in which 90 percent of  the photons arrive , This is to check if its a short or long grb
 
     """
-    f_obs = np.asarray(f_obs)  # Convert to numpy array for vectorized operations
-    sigma = np.zeros_like(f_obs, dtype=float)  # Initialize array with zeros
+    f_obs = np.asarray(f_obs)  
+    sigma = np.zeros_like(f_obs, dtype=float) 
 
-    nonzero_mask = f_obs > 0  # Boolean mask for nonzero values
+    nonzero_mask = f_obs > 0  
 
     if t90 > 2:  # Long GRB case
-        sigma[nonzero_mask] = 10**(-0.88 * np.log10(f_obs[nonzero_mask]) - 3) 
+        sigma[nonzero_mask] = 10**(-0.88 * np.log10(f_obs[nonzero_mask]*np.sqrt(Area/50)) - 3) # 50cm2 is the actual area of HERMES detector 
         
     else:  # Short GRB case
-        sigma[nonzero_mask] = 10**(-1.02 * np.log10(f_obs[nonzero_mask]) - 1.33) 
+        sigma[nonzero_mask] = 10**(-1.02 * np.log10(f_obs[nonzero_mask]*np.sqrt(Area/50)) - 1.33) 
         
     return sigma
 
@@ -279,7 +278,7 @@ def sigma_cc(t90, f_obs):
 #                 ll_sum.append(gaussian_ll)
 #     return np.sum(ll_sum)
 
-def compute_pairwise_noise(f_obs, t_90, rng):
+def compute_pairwise_noise(f_obs, t_90, Area, rng):
     """
     Computes pairwise noise and sigma values only for satellites with f_obs > 0
     """
@@ -289,7 +288,7 @@ def compute_pairwise_noise(f_obs, t_90, rng):
     noise_matrix = np.zeros((num_valid, num_valid))
     sigma_final = np.zeros((num_valid, num_valid))
     
-    sigma = sigma_cc(t_90, f_obs)  # Full sigma array
+    sigma = sigma_cc(t_90, f_obs, Area)  # Full sigma array
 
     for i in range(num_valid - 1):
         for j in range(i + 1, num_valid):
@@ -300,7 +299,7 @@ def compute_pairwise_noise(f_obs, t_90, rng):
     return noise_matrix, sigma_final
 
 
-def log_likelihood_td(t_obs, t_pred, f_obs, t_90, noise_matrix, sigma_final):
+def log_likelihood_td(t_obs, t_pred, f_obs, noise_matrix, sigma_final):
     """
     Computes the log-likelihood using only valid satellites.
     
@@ -384,22 +383,22 @@ def log_likelihood(theta, t_obs, f_obs, t_90,noise_matrix,sigma_final, Ph_obs, A
         ra_guess, dec_guess, f_guess = theta
         d_guess = coord_transform.r2c(ra_guess, dec_guess)
         f_pred, t_pred = simulate_satellite_det(d_guess, f_guess, sat_pos, sat_pointing, flux_limit, lat_lon) 
-        total =  log_likelihood_flux(Ph_obs, f_pred, t_90, Area)    + log_likelihood_td(t_obs, t_pred, f_obs, t_90, noise_matrix,sigma_final ) #
+        total =  log_likelihood_flux(Ph_obs, f_pred, t_90, Area)    + log_likelihood_td(t_obs, t_pred, f_obs, noise_matrix,sigma_final ) #
     return total
 
 
-def flux_lower_bound(type):
+def flux_lower_bound(type,Area):
     if type == 'long':
-        flux_limit = flux_limit_long
+        flux_limit = flux_limit_long(Area) 
     elif type == 'short':
-        flux_limit = flux_limit_short
+        flux_limit =flux_limit_short(Area) 
     return flux_limit
     
 
-def flux_higher_bound_walkers(flux_limit):
-    if flux_limit == flux_limit_long:
+def flux_higher_bound_walkers(flux_limit, Area):
+    if flux_limit == flux_limit_long(Area): 
         flux_high = 2
-    elif flux_limit == flux_limit_short:
+    elif flux_limit ==  flux_limit_short(Area): 
         flux_high = 5
     return flux_high
 

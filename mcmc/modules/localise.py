@@ -147,7 +147,7 @@ def ci_68_and_sigma_2(flat_samples, true_value, type, save_path, localisation_sh
     If area_68 < area_threshold, increases grid resolution and retries (up to max_attempts).
     """
     for attempt in range(max_attempts):
-        num_vertices = initial_num_vertices * (10 ** attempt)
+        num_vertices = initial_num_vertices * (20 ** attempt)
         print(f"\n[Attempt {attempt + 1}] Using {num_vertices} grid points.")
 
         # Generating Grid Points

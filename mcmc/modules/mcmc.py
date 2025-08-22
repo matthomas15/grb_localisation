@@ -15,7 +15,7 @@ def mcmc_sampler(ra, dec, steps, nwalk, move, t_obs, f_obs, t_90, Ph_obs, Area, 
     """
     We use the mcmc sampler for our localisation.
     """
-    flux_high = likelihood.flux_higher_bound_walkers(flux_limit)
+    flux_high = likelihood.flux_higher_bound_walkers(flux_limit, Area)
 
     if offset == 0:
         pos = np.array([rng.uniform(ra-5, ra + 5, nwalk),

@@ -50,9 +50,10 @@ def generate_grb(catalog,rng):
     ra = radec_points[0]
     dec = radec_points[1]
     t90 = rng.choice(catalog['t90     '])
-    flux = rng.choice(catalog['flnc_band_phtfluxb'])
+    flux_p = rng.choice(catalog['pflx_band_phtfluxb'])
+    flux_avg = rng.choice(catalog['flnc_band_phtfluxb'])
     #print("RA:", ra, "Dec:", dec, "T90:", t90, "Flux:", flux)
-    return cartesian_points, ra, dec, t90, flux
+    return cartesian_points, ra, dec, t90, flux_p, flux_avg
 
 
 
