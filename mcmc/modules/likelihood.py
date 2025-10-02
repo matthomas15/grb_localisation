@@ -65,19 +65,6 @@ def cos_angle_btw_vec(v1, v2):
 
 
 
-# def cos_angle_btw_vec(v1, v2):
-#     """ 
-#     Parameters: 
-#     vectors [x1, y1, z1], [x2, y2, z2]    
-    
-#     Returns:
-#        Cosine Angle between these vectors in radian
-
-#     """
-#     cos_theta = np.dot(v1,v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)) #  in radians
-#     #theta = np.degrees(np.arccos(cos_theta)) 
-#     return cos_theta
-
 def angle_btw_vec(v1, v2):
     """
     Vectorized angle (in degrees) between a single vector v1 (shape: (3,))
@@ -90,47 +77,7 @@ def angle_btw_vec(v1, v2):
     cos_theta = np.clip(cos_theta, -1.0, 1.0)  # Prevents NaNs due to rounding errors
     theta = np.degrees(np.arccos(cos_theta))
     return theta
-# def angle_btw_vec(v1, v2):
-#     """ 
-#     Parameters: 
-#     vectors [x1, y1, z1], [x2, y2, z2]    
-    
-#     Returns:
-#         Angle between these vectors in degree
-#     """
-#     cos_theta = np.dot(v1,v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)) #  in radians
-#     theta = np.degrees(np.arccos(cos_theta)) 
-#     return theta
 
-
-
-# def get_particle_background_value(lat, lon):
-#     """
-#     Returns the particle background value at a given (lat, lon) index.
-    
-#     """
-
-#     if np.isnan(lat) or np.isnan(lon):
-#         raise ValueError(f"Invalid coordinates: lat={lat}, lon={lon}")
-#     lat = int( np.round( lat ) )
-#     lon = int( np.round( lon ) )
-
-#     bkgd = combined_bkgd[ lat + 90 - 1 ][ lon + 180 - 1 ]
-
-#     return bkgd
-
-# def get_nonzero_background_indices(positions):
-#     """
-#     Returns the list of indices where positions have nonzero particle background.
-    
-#     """
-
-#     nonzero_indices = []
-#     for i, (lat, lon) in enumerate(positions):
-#         bkgd_value = get_particle_background_value(lat, lon)
-#         if bkgd_value > 0:
-#             nonzero_indices.append(i)  # Store the index
-#     return nonzero_indices
 
 def get_nonzero_background_indices(lat_lons):
     """
@@ -165,26 +112,9 @@ def get_nonzero_background_indices(lat_lons):
 
     return original_indices[nonzero_mask].tolist()
 
-# def simulate_satellite_det(grb_vec, flux_avg, sat_pos, sat_pointing, flux_limit, lat_lon):
 
-#     """
-#     This function returns the arrival times on each satellite;t_obs and the flux observed by each satllite;f_obs.
-#     The observed flux is set to zero if the satellite is in earth occulted region
-#     or if the flux is below the instrument flux limit (for long and short grb this limit is different) 
 
-#     """
-#     sat2earth_vec = [-sat for sat in sat_pos]
-#     occult = [angle_btw_vec(grb_vec, se_vec) for se_vec in sat2earth_vec]
-#     costheta = np.array([cos_angle_btw_vec(grb_vec,sp) for sp in sat_pointing])
-#     bkgd_index = get_nonzero_background_indices(lat_lon)
-#     f_obs = flux_avg * costheta
-#     t_obs = time_delay( np.array([0, 0, 0]),sat_pos, grb_vec) 
-#     for i in range(len(f_obs)):
-#         if  occult[i] < occ_angle or f_obs[i] < flux_limit or i in bkgd_index:#  
-#             f_obs[i] = 0
-#     return f_obs, t_obs
-
-def simulate_satellite_det(grb_vec, flux_avg, sat_pos, sat_pointing, flux_limit, lat_lon):
+def simulate_satellite_det(grb_vec, flux_p, flux_avg, sat_pos, sat_pointing, flux_limit, lat_lon):
     """
     Simulates satellite detections of a GRB.
 
@@ -210,21 +140,48 @@ def simulate_satellite_det(grb_vec, flux_avg, sat_pos, sat_pointing, flux_limit,
 
     bkgd_index = get_nonzero_background_indices(lat_lon)
 
-    f_obs = flux_avg * costheta
+    f_p_obs = flux_p * costheta
+    f_avg_obs = flux_avg * costheta
 
     t_obs = time_delay(np.array([0, 0, 0]), sat_pos, grb_vec)
 
-    mask = (occult >= occ_angle) & (f_obs >= flux_limit)
+    mask_1 = (occult >= occ_angle) & (f_p_obs >= flux_limit)
+    mask_1[list(bkgd_index)] = False  # Set f_obs = 0 for background-blocked indices , mask is like setting 1 if true and 0 if false
+    # mask[f_p_obs <= 0] = False # Change
+    f_p_obs= f_p_obs * mask_1  # Zero out undetected values
+
+    mask_2 = (occult >= occ_angle)
+    mask_2[list(bkgd_index)] = False
+    f_avg_obs = flux_avg * mask_2
+    #f_avg_obs = f_avg_obs * mask
+
+    return f_avg_obs, t_obs, f_p_obs 
+
+def simulate_satellite_det_pred(d_guess, f_guess, sat_pos, sat_pointing, lat_lon):
+
+    sat_pos = np.asarray(sat_pos)
+    sat_pointing = np.asarray(sat_pointing)
+
+    sat2earth_vec = -sat_pos
+
+    occult = angle_btw_vec(d_guess, sat2earth_vec)
+    costheta = cos_angle_btw_vec(d_guess, sat_pointing)
+
+    bkgd_index = get_nonzero_background_indices(lat_lon)
+
+    f_pred = f_guess * costheta
+
+    t_pred = time_delay(np.array([0, 0, 0]), sat_pos, d_guess)
+
+    mask = (occult >= occ_angle) 
     mask[list(bkgd_index)] = False  # Set f_obs = 0 for background-blocked indices , mask is like setting 1 if true and 0 if false
 
-    f_obs = f_obs * mask  # Zero out undetected values
+    f_pred = f_pred * mask  # Zero out undetected values
 
-    return f_obs, t_obs
-
-
+    return f_pred, t_pred
 
 
-def sigma_cc(t90, f_obs, Area):
+def sigma_cc(t90, f_p_obs, Area):
     
     """
     Gives the sigma value of signal cross-correlation  from flux and sigma_CC relation
@@ -232,63 +189,31 @@ def sigma_cc(t90, f_obs, Area):
         t90: Time interval in which 90 percent of  the photons arrive , This is to check if its a short or long grb
 
     """
-    f_obs = np.asarray(f_obs)  
-    sigma = np.zeros_like(f_obs, dtype=float) 
+    f_p_obs = np.asarray(f_p_obs)  
+    sigma = np.zeros_like(f_p_obs, dtype=float) 
 
-    nonzero_mask = f_obs > 0  
+    nonzero_mask = f_p_obs > 0  
 
     if t90 > 2:  # Long GRB case
-        sigma[nonzero_mask] = 10**(-0.88 * np.log10(f_obs[nonzero_mask]*np.sqrt(Area/50)) - 3) # 50cm2 is the actual area of HERMES detector 
+        sigma[nonzero_mask] = 10**(-0.88 * np.log10(f_p_obs[nonzero_mask]*np.sqrt(Area/50)) - 3) # 50cm2 is the actual area of HERMES detector 
         
     else:  # Short GRB case
-        sigma[nonzero_mask] = 10**(-1.02 * np.log10(f_obs[nonzero_mask]*np.sqrt(Area/50)) - 1.33) 
+        sigma[nonzero_mask] = 10**(-1.02 * np.log10(f_p_obs[nonzero_mask]*np.sqrt(Area/50)) - 1.33) 
         
     return sigma
 
 
-
-
-# def compute_pairwise_noise(f_obs, t_90, rng):
-#     """
-    
-#     """
-#     num_sat = len(f_obs)
-#     noise_matrix = np.zeros((num_sat, num_sat))
-#     sigma_final = np.zeros((num_sat,num_sat))
-#     sigma = sigma_cc(t_90, f_obs)
-#     for i in range(num_sat - 1):
-#         for j in range(i + 1, num_sat):
-#             if f_obs[i] > 0 and f_obs[j] > 0:
-#                 sigma_final[i, j] = np.max([sigma[i], sigma[j]])
-#                 noise_matrix[i, j] = rng.normal(0, sigma_final[i,j])
-#     return noise_matrix, sigma_final
-
-# def log_likelihood_td(t_obs, t_pred, f_obs, t_90, noise_matrix, sigma_final):
-
-#     num_sat = len(f_obs)
-#     ll_sum = []
-
-#     for i in range(num_sat - 1):
-#         for j in range(i + 1, num_sat):
-#             if f_obs[i] > 0 and f_obs[j] > 0:
-#                 delta_t_obs = t_obs[i] - t_obs[j]
-#                 delta_t_pred = t_pred[i] - t_pred[j]
-#                 measured_delay = delta_t_obs + noise_matrix[i,j]
-#                 gaussian_ll = -0.5 * ((measured_delay - delta_t_pred) ** 2) / (sigma_final[i,j] ** 2)
-#                 ll_sum.append(gaussian_ll)
-#     return np.sum(ll_sum)
-
-def compute_pairwise_noise(f_obs, t_90, Area, rng):
+def compute_pairwise_noise(f_p_obs, t_90, Area, rng):
     """
     Computes pairwise noise and sigma values only for satellites with f_obs > 0
     """
-    valid_indices = np.where(f_obs > 0)[0]
+    valid_indices = np.where(f_p_obs > 0)[0]
     num_valid = len(valid_indices)
 
     noise_matrix = np.zeros((num_valid, num_valid))
     sigma_final = np.zeros((num_valid, num_valid))
     
-    sigma = sigma_cc(t_90, f_obs, Area)  # Full sigma array
+    sigma = sigma_cc(t_90, f_p_obs, Area)  # Full sigma array
 
     for i in range(num_valid - 1):
         for j in range(i + 1, num_valid):
@@ -299,13 +224,13 @@ def compute_pairwise_noise(f_obs, t_90, Area, rng):
     return noise_matrix, sigma_final
 
 
-def log_likelihood_td(t_obs, t_pred, f_obs, noise_matrix, sigma_final):
+def log_likelihood_td(t_obs, t_pred, f_p_obs, noise_matrix, sigma_final):
     """
     Computes the log-likelihood using only valid satellites.
     
     valid_indices: array of indices with f_obs > 0
     """
-    valid_indices = np.where(f_obs > 0)[0]
+    valid_indices = np.where(f_p_obs > 0)[0]
     t_obs_valid = t_obs[valid_indices]
     t_pred_valid = t_pred[valid_indices]
     num_valid = len(valid_indices)
@@ -325,9 +250,6 @@ def log_likelihood_td(t_obs, t_pred, f_obs, noise_matrix, sigma_final):
 
 
 
-
-
-
 def log_likelihood_flux(Ph_obs, f_pred, t90, Area): 
 
     """
@@ -340,50 +262,22 @@ def log_likelihood_flux(Ph_obs, f_pred, t90, Area):
 
 
 
-def log_likelihood(theta, t_obs, f_obs, t_90,noise_matrix,sigma_final, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset, lat_lon):
+def log_likelihood(theta, t_obs, f_p_obs, t_90,noise_matrix,sigma_final, Ph_obs, Area, sat_pos, sat_pointing, offset, lat_lon):
     """
     We simulate the guess parameters in the similar way that we have simulated the satellite detetction for true values
     we will be using the guess direction and guess flux for the grb instead.
 
     """
-    
-    # t_obs_list= t_obs.tolist()
-    # print(f"t_obs: {t_obs_list}")
-    # theta_list=theta.tolist()
-    # print(f"theta:{theta_list}")
-    # f_obs_list= f_obs.tolist()
-    # print(f"f_obs: {f_obs_list}")
-    # t_90_list=t_90.tolist()
-    # print(f"t_90:{t_90_list}")
-    # noise_matrix_list=noise_matrix.tolist()
-    # print(f"noise_matrix:{noise_matrix_list}")
-    # Ph_obs_list= Ph_obs.tolist()
-    # print(f"Ph_obs: {Ph_obs_list}")
-    # # f_pred_list=f_pred.tolist()
-    # # print(f"f_pred:{f_pred_list}")
-    # # lat_lon_list=lat_lon.tolist()
-    # print(f"lat_lon:{lat_lon}")
-    # t_90_list= t_90.tolist()
-    # print(f"t_90:{t_90_list}")
-    # Area=Area.tolist()
-    # print(f"Area:{Area}")
-    # sat_pos=sat_pos.tolist()
-    # print(f"sat_pos:{sat_pos}")
-    # sat_pointing=sat_pointing.tolist()
-    # print(f"sat_pointing:{sat_pointing}")
-    # exit()
-
-
     if offset == 0:
         ra_guess, dec_guess = theta
         d_guess = coord_transform.r2c(ra_guess, dec_guess)
         t_pred  = time_delay( np.array([0, 0, 0]),sat_pos, d_guess) 
-        total = log_likelihood_td(t_obs, t_pred, f_obs, t_90,noise_matrix,sigma_final)
+        total = log_likelihood_td(t_obs, t_pred, f_p_obs,noise_matrix,sigma_final)
     else:
         ra_guess, dec_guess, f_guess = theta
         d_guess = coord_transform.r2c(ra_guess, dec_guess)
-        f_pred, t_pred = simulate_satellite_det(d_guess, f_guess, sat_pos, sat_pointing, flux_limit, lat_lon) 
-        total =  log_likelihood_flux(Ph_obs, f_pred, t_90, Area)    + log_likelihood_td(t_obs, t_pred, f_obs, noise_matrix,sigma_final ) #
+        f_pred, t_pred = simulate_satellite_det_pred(d_guess, f_guess, sat_pos, sat_pointing, lat_lon) 
+        total =   log_likelihood_td(t_obs, t_pred, f_p_obs, noise_matrix,sigma_final ) + log_likelihood_flux(Ph_obs, f_pred, t_90, Area)  
     return total
 
 
@@ -425,11 +319,11 @@ TODO: The prior can be modified to remove the occulted regions. THINK!!? For eac
 
 
 
-def log_probability(theta, ra, t_obs, f_obs, t_90,noise_matrix,sigma_final, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset, lat_lon):
+def log_probability(theta, ra, t_obs, f_p_obs, t_90, noise_matrix, sigma_final, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset, lat_lon):
     lp = log_prior(theta, ra, flux_limit, offset)
     if not np.isfinite(lp): 
         return -np.inf
-    log_probability = lp + log_likelihood(theta, t_obs, f_obs, t_90, noise_matrix, sigma_final, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset,lat_lon )
+    log_probability = lp + log_likelihood(theta, t_obs, f_p_obs, t_90, noise_matrix, sigma_final, Ph_obs, Area, sat_pos, sat_pointing, offset,lat_lon )
     return log_probability 
 
 labels = ["ra", "dec", "flux"] # this is used in plot_chains, cornerplot and show_results3
