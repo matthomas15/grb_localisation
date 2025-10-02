@@ -114,7 +114,7 @@ def get_nonzero_background_indices(lat_lons):
 
 
 
-def simulate_satellite_det(grb_vec, flux_p, flux_avg, sat_pos, sat_pointing, flux_limit, lat_lon):
+def simulate_satellite_det(grb_vec, flux_p, sat_pos, sat_pointing, flux_limit, lat_lon):
     """
     Simulates satellite detections of a GRB.
 
@@ -132,30 +132,20 @@ def simulate_satellite_det(grb_vec, flux_p, flux_avg, sat_pos, sat_pointing, flu
     """
     sat_pos = np.asarray(sat_pos)
     sat_pointing = np.asarray(sat_pointing)
-
     sat2earth_vec = -sat_pos
-
     occult = angle_btw_vec(grb_vec, sat2earth_vec)
     costheta = cos_angle_btw_vec(grb_vec, sat_pointing)
-
     bkgd_index = get_nonzero_background_indices(lat_lon)
 
     f_p_obs = flux_p * costheta
-    f_avg_obs = flux_avg * costheta
-
     t_obs = time_delay(np.array([0, 0, 0]), sat_pos, grb_vec)
 
-    mask_1 = (occult >= occ_angle) & (f_p_obs >= flux_limit)
-    mask_1[list(bkgd_index)] = False  # Set f_obs = 0 for background-blocked indices , mask is like setting 1 if true and 0 if false
+    mask = (occult >= occ_angle) & (f_p_obs >= flux_limit)
+    mask[list(bkgd_index)] = False  # Set f_obs = 0 for background-blocked indices , mask is like setting 1 if true and 0 if false
     # mask[f_p_obs <= 0] = False # Change
-    f_p_obs= f_p_obs * mask_1  # Zero out undetected values
+    f_p_obs= f_p_obs * mask # Zero out undetected values
 
-    mask_2 = (occult >= occ_angle)
-    mask_2[list(bkgd_index)] = False
-    f_avg_obs = flux_avg * mask_2
-    #f_avg_obs = f_avg_obs * mask
-
-    return f_avg_obs, t_obs, f_p_obs 
+    return  f_p_obs ,t_obs
 
 def simulate_satellite_det_pred(d_guess, f_guess, sat_pos, sat_pointing, lat_lon):
 
@@ -248,21 +238,19 @@ def log_likelihood_td(t_obs, t_pred, f_p_obs, noise_matrix, sigma_final):
     return np.sum(ll_sum)
 
 
-
-
-def log_likelihood_flux(Ph_obs, f_pred, t90, Area): 
+def log_likelihood_flux(Ph_obs, f_pred, t_peak, Area): 
 
     """
     This is a poisson function. Ph_obs is pre-calculated using  observed flux(f_obs), t90 and area of the detector.
 
     """
-    Ph_guess = np.maximum(f_pred * t90 * Area, 1e-10)  # Ph_guess cannot be zero, as log(Ph_guess) will be undefined
+    Ph_guess = np.maximum(f_pred * t_peak * Area, 1e-10)  # Ph_guess cannot be zero, as log(Ph_guess) will be undefined
     poisson_ll = Ph_obs * np.log(Ph_guess) - Ph_guess - gammaln(Ph_obs + 1) # log of poisson function
     return  np.sum(poisson_ll)
 
 
 
-def log_likelihood(theta, t_obs, f_p_obs, t_90,noise_matrix,sigma_final, Ph_obs, Area, sat_pos, sat_pointing, offset, lat_lon):
+def log_likelihood(theta, t_obs, f_p_obs, t_peak, noise_matrix, sigma_final, Ph_obs, Area, sat_pos, sat_pointing,flux_limit, offset, lat_lon):
     """
     We simulate the guess parameters in the similar way that we have simulated the satellite detetction for true values
     we will be using the guess direction and guess flux for the grb instead.
@@ -276,8 +264,8 @@ def log_likelihood(theta, t_obs, f_p_obs, t_90,noise_matrix,sigma_final, Ph_obs,
     else:
         ra_guess, dec_guess, f_guess = theta
         d_guess = coord_transform.r2c(ra_guess, dec_guess)
-        f_pred, t_pred = simulate_satellite_det_pred(d_guess, f_guess, sat_pos, sat_pointing, lat_lon) 
-        total =   log_likelihood_td(t_obs, t_pred, f_p_obs, noise_matrix,sigma_final ) + log_likelihood_flux(Ph_obs, f_pred, t_90, Area)  
+        f_pred, t_pred = simulate_satellite_det(d_guess, f_guess, sat_pos, sat_pointing, flux_limit, lat_lon) 
+        total =   log_likelihood_td(t_obs, t_pred, f_p_obs, noise_matrix,sigma_final ) + log_likelihood_flux(Ph_obs, f_pred, t_peak, Area)  
     return total
 
 
@@ -319,11 +307,11 @@ TODO: The prior can be modified to remove the occulted regions. THINK!!? For eac
 
 
 
-def log_probability(theta, ra, t_obs, f_p_obs, t_90, noise_matrix, sigma_final, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset, lat_lon):
+def log_probability(theta, ra, t_obs, f_p_obs, t_peak, noise_matrix, sigma_final, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset, lat_lon):
     lp = log_prior(theta, ra, flux_limit, offset)
     if not np.isfinite(lp): 
         return -np.inf
-    log_probability = lp + log_likelihood(theta, t_obs, f_p_obs, t_90, noise_matrix, sigma_final, Ph_obs, Area, sat_pos, sat_pointing, offset,lat_lon )
+    log_probability = lp + log_likelihood(theta, t_obs, f_p_obs, t_peak, noise_matrix, sigma_final, Ph_obs, Area, sat_pos, sat_pointing,flux_limit, offset,lat_lon )
     return log_probability 
 
 labels = ["ra", "dec", "flux"] # this is used in plot_chains, cornerplot and show_results3

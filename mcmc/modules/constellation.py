@@ -1,14 +1,41 @@
 import numpy as np
 
+R_earth = 6371.0 #km
+altitude_leo = 550 #km
 
-def get_satellite_positions(
-    t_seconds, num_sats,angular_spacing_deg, inclination_deg, group_rotation_deg, altitude_km=510, period_minutes=96):
 
-    R_earth = 6371.0  # km
-    R_orbit = R_earth + altitude_km
-    T = period_minutes * 60
+def orbital_period(R_earth, altitude_leo):
+    """
+    Computes the orbital period of a satellite in a circular Earth orbit.
+    
+    Parameters:
+    -----------
+    altitude_km : float
+        Altitude of the satellite above Earth's surface in kilometers.
+
+    Returns:
+    --------
+    period_sec : float
+        Orbital period in seconds.
+    
+    """
+    G = 6.67430e-11  # gravitational constant (m^3 kg^-1 s^-2)
+    M = 5.972e24     # mass of Earth (kg)
+
+    r = (R_earth + altitude_leo)* 1e3  # total orbital radius in meters
+    T = 2 * np.pi * np.sqrt(r**3 / (G * M))  # in seconds
+    return T # seconds
+
+orbit_period = orbital_period(R_earth, altitude_leo)
+
+def get_satellite_positions(t_seconds, num_sats, angular_spacing_deg, inclination_deg, group_rotation_deg):
+    """
+    Generates posiitons of satellites in a
+    """
+
+    R_orbit = R_earth + altitude_leo
+    T = orbit_period
     omega = 2 * np.pi / T  # rad/s
-
 
     spacing_rad = np.radians(angular_spacing_deg)
     group_rotation_rad = np.radians(group_rotation_deg)
@@ -29,8 +56,7 @@ def get_satellite_positions(
     return np.vstack((x, y_inc, z_inc)).T
 
 
-def generate_full_constellation(t_seconds, planes):
-    sats_per_plane = 8
+def generate_full_constellation(sats_per_plane, t_seconds, planes):
     angular_spacing = 360 / sats_per_plane
 
     all_positions = []
@@ -54,15 +80,16 @@ def zenith_pointing(sat_positions):
         sat_positions: np.ndarray of shape (N, 3), satellite positions in ECI frame.
     
     Returns:
-        pointings: np.ndarray of shape (N, 2), where each row is (RA, Dec) in degrees.
+        pointings: np.ndarray of shape (N, 3), where each row is (X,Y,Z).
     """
     directions = sat_positions / np.linalg.norm(sat_positions, axis=1)[:, None]  # Normalize
     x, y, z = directions[:, 0], directions[:, 1], directions[:, 2]
-
-    ra = np.degrees(np.arctan2(y, x)) % 360
-    dec = np.degrees(np.arcsin(z))
     return np.column_stack((x,y,z))
-    #return np.column_stack((ra, dec))
+
+    # ra = np.degrees(np.arctan2(y, x)) % 360
+    # dec = np.degrees(np.arcsin(z))
+    # return np.column_stack((ra, dec))
+    
 
 def spherical_offsets(ra0_deg, dec0_deg, n_sats, offset_deg):
         ra0 = np.radians(ra0_deg)
@@ -161,38 +188,3 @@ def get_pointing_radec(sat_positions, num_sats, offset_deg):
     #     offset_indices[group_id] += 1
 
     return pointings, [(group_ra_deg[0], 0), (group_ra_deg[1], 0)]
-
-
-
-def eci_to_latlon(eci_positions, t_seconds):
-    """
-    Convert ECI positions (in km) to latitude and longitude (in degrees),
-    accounting for Earth's rotation at time t_seconds.
-    """
-    earth_rot_rate = 2 * np.pi / 86164  # rad/s, sidereal rotation
-    theta = earth_rot_rate * t_seconds
-
-    lat_lon_list = []
-
-    for pos in eci_positions:
-        x_eci, y_eci, z_eci = pos
-
-        # Rotate ECI -> ECEF
-        x_ecef = np.cos(theta) * x_eci + np.sin(theta) * y_eci
-        y_ecef = -np.sin(theta) * x_eci + np.cos(theta) * y_eci
-        z_ecef = z_eci
-
-        # Compute lat/lon
-        lon = np.arctan2(y_ecef, x_ecef)
-        r_xy = np.sqrt(x_ecef**2 + y_ecef**2)
-        lat = np.arctan2(z_ecef, r_xy)
-
-        lat_deg = np.degrees(lat)
-        lon_deg = (np.degrees(lon) + 360) % 360  # wrap to [0, 360)
-        if lon_deg > 180:
-            lon_deg -= 360  # optional: wrap to [-180, 180]
-
-        lat_lon_list.append((lat_deg, lon_deg))
-
-    return lat_lon_list
-    

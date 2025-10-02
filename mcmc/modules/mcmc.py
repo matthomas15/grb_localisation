@@ -1,4 +1,3 @@
-
 import numpy as np
 import matplotlib.pyplot as plt
 from modules import likelihood
@@ -11,7 +10,7 @@ from emcee.moves import StretchMove
 
 labels = ["ra", "dec", "flux"]
 
-def mcmc_sampler(ra, dec, steps, nwalk, move, t_obs, f_obs, t_90, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset, lat_lon, rng, noise_matrix,sigma_final):
+def mcmc_sampler(ra, dec, steps, nwalk, move, t_obs, f_p_obs, t_peak, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset, lat_lon, rng, noise_matrix,sigma_final, ):
     """
     We use the mcmc sampler for our localisation.
     """
@@ -29,7 +28,7 @@ def mcmc_sampler(ra, dec, steps, nwalk, move, t_obs, f_obs, t_90, Ph_obs, Area, 
 
         # The sampler we are using
     sampler = emcee.EnsembleSampler(
-        nwalkers, ndim, likelihood.log_probability, args=( ra, t_obs, f_obs, t_90, noise_matrix,sigma_final, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset,lat_lon),
+        nwalkers, ndim, likelihood.log_probability, args=( ra, t_obs, f_p_obs, t_peak, noise_matrix,sigma_final, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset,lat_lon),
         moves=StretchMove(a = move) # Changes this if necessary (default value = 2)
         )
     sampler.run_mcmc(pos,steps, progress=True)
@@ -38,7 +37,7 @@ def mcmc_sampler(ra, dec, steps, nwalk, move, t_obs, f_obs, t_90, Ph_obs, Area, 
 
 
 
-def plot_chains(sampler, ra, dec, flux_avg,offset, save_path, chain_show= False, chain_save= False):
+def plot_chains(sampler, ra, dec, flux_avg, offset, save_path, chain_show= False, chain_save= False):
     """
     Plots the MCMC chains.
     
@@ -80,11 +79,11 @@ def get_flat_samples(sampler, discard, thin):
     # can include the extra parameter (thin = 15) that shows every point after 15 steps
     return flat_samples
 
-def corner_plot(flat_samples, ra, dec, flux_avg, offset, save_path, corner_show = False, corner_save = False):
+def corner_plot(flat_samples, ra, dec, flux_p, offset, save_path, corner_show = False, corner_save = False):
     if offset == 0:
         fig = corner.corner(flat_samples, labels = ["ra", "dec"], truths=[ra, dec] )
     else:
-        fig = corner.corner(flat_samples, labels = ["ra", "dec", "flux"], truths= [ra, dec, flux_avg])
+        fig = corner.corner(flat_samples, labels = ["ra", "dec", "flux"], truths= [ra, dec, flux_p])
     
     if corner_save:
         os.makedirs(save_path, exist_ok=True)  # Ensure the directory exists
@@ -103,21 +102,22 @@ def show_result(flat_samples, offset):
         q = np.diff(mcmc)
         txt = r"\mathrm{{{3}}} = {0:.3f}_{{-{1:.3f}}}^{{{2:.3f}}}"
         txt = txt.format(mcmc[1], q[0], q[1], labels[i])
+
         display(Math(txt))
 
 
 
-def run_mcmc(ra, dec, flux_avg, t_90,rng, noise_matrix,sigma_final, t_obs, f_obs, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset,lat_lon, steps, nwalk, move, discard, thin, save_path, corner_show= False, corner_save = False, chain_show= False, chain_save = False):
-    """
+def run_mcmc(ra, dec, flux_p, t_peak, rng, noise_matrix, sigma_final, t_obs, f_p_obs, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset, lat_lon, steps, nwalk, move, discard, thin, save_path, corner_show= False, corner_save = False, chain_show= False, chain_save = False):
+    """s
     This function runs MCMC, plot chains, corner plots and also finds  the 68% credible interval region.
 
     """
     # initial_position = optimize_ll(ra, dec, flux_avg, t_obs, f_obs, t_90, Ph_obs, sat_pointing, flux_limit)
     # sampler = mcmc_sampler(initial_position,steps, nwalk, move, t_obs, f_obs, t_90, Ph_obs, sat_pointing, flux_limit)
-    sampler = mcmc_sampler(ra, dec, steps, nwalk, move,  t_obs, f_obs, t_90, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset,lat_lon,rng, noise_matrix,sigma_final)
+    sampler = mcmc_sampler(ra, dec, steps, nwalk, move,  t_obs, f_p_obs, t_peak, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset,lat_lon,rng, noise_matrix,sigma_final)
     flat_samples = get_flat_samples(sampler, discard, thin)
-    corner_plot(flat_samples, ra, dec, flux_avg, offset, save_path, corner_show, corner_save )
-    plot_chains(sampler, ra, dec, flux_avg, offset,  save_path, chain_show, chain_save)
+    corner_plot(flat_samples, ra, dec, flux_p, offset, save_path, corner_show, corner_save )
+    plot_chains(sampler, ra, dec, flux_p, offset,  save_path, chain_show, chain_save)
     
     result = show_result(flat_samples, offset)
 

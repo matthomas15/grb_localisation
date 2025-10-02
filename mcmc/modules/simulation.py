@@ -49,11 +49,13 @@ def generate_grb(catalog,rng):
     radec_points = coord_transform.c2r(cartesian_points[0],cartesian_points[1],cartesian_points[2])
     ra = radec_points[0]
     dec = radec_points[1]
-    t90 = rng.choice(catalog['t90     '])
-    flux_p = rng.choice(catalog['pflx_band_phtfluxb'])
-    flux_avg = rng.choice(catalog['flnc_band_phtfluxb'])
+    i = rng.integers(len(catalog))
+    t90 = catalog['t90     '][i]
+    t_peak = catalog['pflx_spectrum_stop'][i]-catalog['pflx_spectrum_start'][i]
+    flux_p = catalog['pflx_band_phtfluxb'][i]
+    flux_avg = catalog['flnc_band_phtfluxb'][i]
     #print("RA:", ra, "Dec:", dec, "T90:", t90, "Flux:", flux)
-    return cartesian_points, ra, dec, t90, flux_p, flux_avg
+    return cartesian_points, ra, dec, t90, flux_p, flux_avg, t_peak
 
 
 
