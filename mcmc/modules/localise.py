@@ -52,8 +52,9 @@ def radec_to_unitvec(ra_deg, dec_deg):
     z = np.sin(dec)
     return np.column_stack((x, y, z))
 
+
 def ci_68_and_sigma_2(flat_samples, true_value, type, save_path, localisation_show, localisation_save,
-                      initial_num_vertices=41253, area_threshold=4.0, max_attempts=2):
+                      initial_num_vertices=41253, area_threshold=4.0, max_attempts=2):#4,2
     """
     Computes the 68% credible area and checks sigma containment for the true value.
     If area_68 < area_threshold, increases grid resolution and retries (up to max_attempts).
@@ -113,25 +114,25 @@ def ci_68_and_sigma_2(flat_samples, true_value, type, save_path, localisation_sh
 
     if sigmas[true_index] == 1:
         containment = "1-sigma"
-        print("True value lies within 1σ (68%) confidence region.")
+        #print("True value lies within 1σ (68%) confidence region.")
     elif sigmas[true_index] == 2:
         containment = "2-sigma"
-        print("True value is within 2σ (95%) but not 1σ.")
+        #print("True value is within 2σ (95%) but not 1σ.")
     else:
         containment = "3-sigma"
-        print("True value is outside 3σ confidence region.")
+        #print("True value is outside 3σ confidence region.")
         
-    print("Grid cells in 1-sigma:", np.sum(sigmas == 1))
-    print("Grid cells in 2-sigma:", np.sum(sigmas == 2))
-    print("Grid cells in 3-sigma:", np.sum(sigmas == 3))
-    print(f"Number of MCMC samples: {total}")
-    print(f"Grid cells with >=1 sample: {np.sum(grid_occupancy > 0)}")
-    print(f"Samples in most occupied grid cell: {np.max(grid_occupancy)}")
-    print(f"68% region includes {np.sum(sigmas == 1)} grid cells.")
-    print(f"95% region includes {np.sum(sigmas <= 2)} grid cells.")
-    print(f"Area of 68% region: {np.sum(sigmas == 1) * area_per_grid_point:.2f} deg²")
+    # print("Grid cells in 1-sigma:", np.sum(sigmas == 1))--------------------------------------------
+    # print("Grid cells in 2-sigma:", np.sum(sigmas == 2))
+    # print("Grid cells in 3-sigma:", np.sum(sigmas == 3))
+    # print(f"Number of MCMC samples: {total}")
+    # print(f"Grid cells with >=1 sample: {np.sum(grid_occupancy > 0)}")
+    # print(f"Samples in most occupied grid cell: {np.max(grid_occupancy)}")
+    # print(f"68% region includes {np.sum(sigmas == 1)} grid cells.")
+    # print(f"95% region includes {np.sum(sigmas <= 2)} grid cells.")
+    # print(f"Area of 68% region: {np.sum(sigmas == 1) * area_per_grid_point:.2f} deg²")
 
-    # -------- Plotting --------
+    # Plot
     plt.figure(figsize=(8, 6))
     mask3 = sigmas == 3
     plt.scatter(grid_ra[mask3], grid_dec[mask3], c="lightgray", s=20, alpha=0.7, zorder=1, label="3σ")
@@ -141,18 +142,119 @@ def ci_68_and_sigma_2(flat_samples, true_value, type, save_path, localisation_sh
 
     mask1 = sigmas == 1
     plt.scatter(grid_ra[mask1], grid_dec[mask1], c="gold", s=30, alpha=0.9, zorder=3, label="1σ")
+
     plt.scatter(true_value[0], true_value[1], color='red', marker='*', s=50,
                 edgecolor='white', linewidth=0.5, zorder=3, label="True position")
     
 
-    if type == "long":
-        plt.xlim(max(0, true_value[0] - 10), min(360, true_value[0] + 10))
-        plt.ylim(max(-90,true_value[1] - 10), min(true_value[1] + 10, 90))
-    elif type == "short":
-        plt.xlim(max(0,true_value[0] - 50),min(360, true_value[0] + 50))
-        plt.ylim(max(-90,true_value[1] - 40), min(true_value[1] + 40, 90))
+    # Adjusting the plot dimension and marker sizes (for 128 sats unhash)
 
-    plt.colorbar(label="Confidence level")
+
+    # if type == "long":
+    #     plt.xlim(max(0, true_value[0] - 10), min(360, true_value[0] + 10))
+    #     plt.ylim(max(-90,true_value[1] - 10), min(true_value[1] + 10, 90))
+    # elif type == "short":
+    #     plt.xlim(max(0,true_value[0] - 50),min(360, true_value[0] + 50))
+    #     plt.ylim(max(-90,true_value[1] - 40), min(true_value[1] + 40, 90))
+
+    
+    plt.xlabel("Right Ascension (RA)")
+    plt.ylabel("Declination (Dec)")
+    plt.title("MCMC Sample Confidence Levels")
+    plt.legend(loc='upper right')
+
+    if localisation_save:
+        os.makedirs(save_path, exist_ok=True)
+        plt.savefig(os.path.join(save_path, "localization_plot.png"))
+
+    if localisation_show:
+        plt.show()
+    else:
+        plt.close()
+
+    return area_68, containment, area_per_grid_point
+
+
+def ci_68_and_sigma_1(flat_samples, true_value, type, save_path, localisation_show, localisation_save):
+    """
+    Computes the 68% credible area and checks sigma containment for the true value.
+    If area_68 < area_threshold, increases grid resolution and retries (up to max_attempts).
+    """
+   
+    num_vertices = 41253 
+       
+
+        # Generating Grid Points
+    grid_ra, grid_dec = grid(num_vertices)
+
+        # Convert RA/Dec to unit vectors for KDTree matching
+    grid_vecs = radec_to_unitvec(grid_ra, grid_dec)
+    ra_mcmc = flat_samples[:, 0] % 360
+    dec_mcmc = flat_samples[:, 1]
+    sample_vecs = radec_to_unitvec(ra_mcmc, dec_mcmc)
+
+        # KDTree to assign each sample to nearest grid point
+    tree = cKDTree(grid_vecs)
+    _, nearest_indices = tree.query(sample_vecs, k=1)
+
+        # Occupancy count per grid point
+    grid_occupancy = np.bincount(nearest_indices, minlength=len(grid_ra))
+    total = len(flat_samples)
+        # Assign confidence levels based on cumulative probability
+    sorted_indices = np.argsort(grid_occupancy)[::-1]
+    sorted_probs = grid_occupancy[sorted_indices] / total
+        
+    sigmas = np.zeros_like(grid_occupancy, dtype=int)
+
+    cumulative = 0.0
+    for idx, prob in zip(sorted_indices, sorted_probs):
+        prev_cumulative = cumulative
+        cumulative += prob
+        if prev_cumulative < 0.68:
+            sigmas[idx] = 1
+        elif prev_cumulative < 0.95:
+            sigmas[idx] = 2
+        else:
+            sigmas[idx] = 3
+
+
+        # Compute area per grid point
+    sphere_area_in_degsq = 41253  # ≈ 41252.96 deg²
+    area_per_grid_point = sphere_area_in_degsq / num_vertices
+    area_68 = np.sum(sigmas == 1) * area_per_grid_point
+
+    #print(f"68% confidence region area: {area_68:.2f} deg² with resolution {num_vertices} vertices")
+
+    # Evaluate containment of true position
+    true_vec = radec_to_unitvec(np.array([true_value[0]]), np.array([true_value[1]]))
+    _, true_index = tree.query(true_vec, k=1)
+
+    if sigmas[true_index] == 1:
+        containment = "1-sigma"
+        #print("True value lies within 1σ (68%) confidence region.")
+    elif sigmas[true_index] == 2:
+        containment = "2-sigma"
+        #print("True value is within 2σ (95%) but not 1σ.")
+    else:
+        containment = "3-sigma"
+        #print("True value is outside 3σ confidence region.")
+   
+    # Plot
+    plt.figure(figsize=(8, 6))
+    mask3 = sigmas == 3
+    plt.scatter(grid_ra[mask3], grid_dec[mask3], c="lightgray", s=20, alpha=0.7, zorder=1, label="3σ")
+
+    mask2 = sigmas == 2
+    plt.scatter(grid_ra[mask2], grid_dec[mask2], c="mediumblue", s=20, alpha=0.8, zorder=2, label="2σ")
+
+    mask1 = sigmas == 1
+    plt.scatter(grid_ra[mask1], grid_dec[mask1], c="gold", s=30, alpha=0.9, zorder=3, label="1σ")
+
+    plt.scatter(true_value[0], true_value[1], color='red', marker='*', s=50,
+                edgecolor='white', linewidth=0.5, zorder=3, label="True position")
+    
+
+    
     plt.xlabel("Right Ascension (RA)")
     plt.ylabel("Declination (Dec)")
     plt.title("MCMC Sample Confidence Levels")

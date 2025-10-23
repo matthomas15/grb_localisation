@@ -26,12 +26,12 @@ def mcmc_sampler(ra, dec, steps, nwalk, move, t_obs, f_p_obs, t_peak, Ph_obs, Ar
                 rng.uniform(flux_limit + 0.1, flux_high, nwalk)]).T  # For long grb (0.5 , 2)  shortgrb(2, 5), 
         nwalkers, ndim = pos.shape
 
-        # The sampler we are using
+
     sampler = emcee.EnsembleSampler(
         nwalkers, ndim, likelihood.log_probability, args=( ra, t_obs, f_p_obs, t_peak, noise_matrix,sigma_final, Ph_obs, Area, sat_pos, sat_pointing, flux_limit, offset,lat_lon),
         moves=StretchMove(a = move) # Changes this if necessary (default value = 2)
         )
-    sampler.run_mcmc(pos,steps, progress=True)
+    sampler.run_mcmc(pos,steps, progress=False) # Change here to show progress
     return sampler
 
 
@@ -60,11 +60,11 @@ def plot_chains(sampler, ra, dec, flux_avg, offset, save_path, chain_show= False
     plt.tight_layout()
     
     if chain_save:  
-        os.makedirs(save_path, exist_ok=True)  # Ensure the directory exists
+        os.makedirs(save_path, exist_ok=True)  # Make sure directory exists
         plt.savefig(os.path.join(save_path, "mcmc_chains.png") )
     if not chain_show:
         plt.close(fig)
-        #plt.show()
+        
     
     
 
@@ -119,6 +119,6 @@ def run_mcmc(ra, dec, flux_p, t_peak, rng, noise_matrix, sigma_final, t_obs, f_p
     corner_plot(flat_samples, ra, dec, flux_p, offset, save_path, corner_show, corner_save )
     plot_chains(sampler, ra, dec, flux_p, offset,  save_path, chain_show, chain_save)
     
-    result = show_result(flat_samples, offset)
+    #result = show_result(flat_samples, offset)  # THIS IS TO DISPLAY RESULTS
 
     return flat_samples

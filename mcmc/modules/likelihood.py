@@ -6,11 +6,11 @@ from scipy.special import gammaln
 
 combined_bkgd = np.load('C:\\Users\\Haritha\\repo\\grb_localisation\\mcmc\\particle_background.npy')
 def flux_limit_long(Area):
-    Flux = 0.116*np.sqrt(Area/125) # 0.116 is flux limit of GBM detectoer of area 125 cm2 
+    Flux = 0.116*np.sqrt(125/Area) # 0.116 is flux limit of GBM detectoer of area 125 cm2 
     return Flux
 
 def flux_limit_short(Area):
-    Flux = 0.465*np.sqrt(Area/125) # 0.465 is flux limit of GBM detectoer of area 125 cm2 
+    Flux = 0.465*np.sqrt(125/Area) # 0.465 is flux limit of GBM detectoer of area 125 cm2 
     return Flux
 
 R_earth =6371 # km
@@ -256,6 +256,32 @@ def log_likelihood(theta, t_obs, f_p_obs, t_peak, noise_matrix, sigma_final, Ph_
     we will be using the guess direction and guess flux for the grb instead.
 
     """
+   
+    # print(f"t_obs: {t_obs_list}")
+    # t_obs_list= t_obs.tolist()
+    # theta_list=theta.tolist()
+    # print(f"theta:{theta_list}")
+    # f_p_obs_list= f_p_obs.tolist()
+    # print(f"f_obs: {f_p_obs_list}")
+    
+    # print(f"t_peak:{t_peak_list}")
+    # t_peak_list=t_peak.tolist()
+    # noise_matrix_list=noise_matrix.tolist()
+    # print(f"noise_matrix:{noise_matrix_list}")
+    # Ph_obs_list= Ph_obs.tolist()
+    # print(f"Ph_obs: {Ph_obs_list}")
+    # # f_pred_list=f_pred.tolist()
+    # # print(f"f_pred:{f_pred_list}")
+    # # lat_lon_list=lat_lon.tolist()
+    # print(f"lat_lon:{lat_lon}")
+   
+    # Area=Area.tolist()
+    # print(f"Area:{Area}")
+    # sat_pos=sat_pos.tolist()
+    # print(f"sat_pos:{sat_pos}")
+    # sat_pointing=sat_pointing.tolist()
+    # print(f"sat_pointing:{sat_pointing}")
+    # exit()
     if offset == 0:
         ra_guess, dec_guess = theta
         d_guess = coord_transform.r2c(ra_guess, dec_guess)
@@ -279,9 +305,9 @@ def flux_lower_bound(type,Area):
 
 def flux_higher_bound_walkers(flux_limit, Area):
     if flux_limit == flux_limit_long(Area): 
-        flux_high = 2
+        flux_high = 4
     elif flux_limit ==  flux_limit_short(Area): 
-        flux_high = 5
+        flux_high = 30
     return flux_high
 
 def log_prior(theta, ra, flux_limit, offset):
@@ -301,7 +327,7 @@ TODO: The prior can be modified to remove the occulted regions. THINK!!? For eac
     else:
         ra_guess, dec_guess,f_guess = theta
     #if ra - 45 <= ra_guess <= ra + 45  and -90 <= dec_guess<= 90 and flux_limit <= f_guess <= 30: #  for l_grb (0.463, 30) and s_grb(1.861, 30)
-    if 0 <= ra_guess <= 360  and -90 <= dec_guess<= 90 and flux_limit <= f_guess <= 30:# flux_limit instead of zero
+    if ra - 45 <= ra_guess <= ra + 45  and -90 <= dec_guess<= 90 and flux_limit <= f_guess <= 375 :# flux_limit instead of zero
         return 0.0
     return -np.inf
 
